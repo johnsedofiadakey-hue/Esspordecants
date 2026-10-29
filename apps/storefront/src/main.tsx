@@ -130,6 +130,7 @@ function Footer() {
 function Home() {
   return (
     <>
+      <div className="reading-progress" aria-hidden="true" />
       <div className="hero-wrap">
         <Header dark />
         <main>
@@ -140,6 +141,7 @@ function Home() {
               aria-label="Concept image of a small perfume decant in warm orange light"
             />
             <div className="hero-shade" />
+            <div className="hero-glow" aria-hidden="true" />
             <div className="hero-content">
               <p className="eyebrow eyebrow--light">Essence, portioned</p>
               <h1 id="hero-title">
@@ -167,9 +169,12 @@ function Home() {
             <span className="hero-caption">
               Concept imagery · actual bottle to be confirmed
             </span>
+            <span className="scroll-cue" aria-hidden="true">
+              Scroll to discover <span />
+            </span>
           </section>
           <section className="intro section-pad">
-            <div>
+            <div data-reveal>
               <p className="eyebrow">The Esspor way</p>
               <h2>
                 A world of fragrance,
@@ -177,7 +182,7 @@ function Home() {
                 in your hands.
               </h2>
             </div>
-            <p>
+            <p data-reveal>
               Explore without the full-bottle commitment. Every fragrance is
               carefully portioned into a travel-ready decant so you can discover
               what feels like you.
@@ -187,7 +192,7 @@ function Home() {
             className="discover section-pad"
             aria-labelledby="discover-title"
           >
-            <div className="section-heading">
+            <div className="section-heading" data-reveal>
               <div>
                 <p className="eyebrow">Discover by mood</p>
                 <h2 id="discover-title">Where will your scent take you?</h2>
@@ -200,6 +205,7 @@ function Home() {
               <a
                 href="/shop?family=Woody"
                 className="mood-card mood-card--woody"
+                data-reveal
               >
                 <div className="mood-card__image" />
                 <div className="mood-card__body">
@@ -211,6 +217,7 @@ function Home() {
               <a
                 href="/shop?family=Fresh"
                 className="mood-card mood-card--fresh"
+                data-reveal
               >
                 <div className="mood-card__image" />
                 <div className="mood-card__body">
@@ -222,6 +229,7 @@ function Home() {
               <a
                 href="/shop?family=Floral"
                 className="mood-card mood-card--floral"
+                data-reveal
               >
                 <div className="mood-card__image" />
                 <div className="mood-card__body">
@@ -237,7 +245,7 @@ function Home() {
             </p>
           </section>
           <section className="steps section-pad">
-            <div className="steps-panel">
+            <div className="steps-panel" data-reveal>
               <p className="eyebrow eyebrow--light">
                 Small portions. Big possibilities.
               </p>
@@ -495,6 +503,7 @@ function ProductPage({
               <div className="product-gallery">
                 <div className="product-main-image">
                   <img
+                    key={`${selectedImage}-${selectedVariant}`}
                     src={
                       (selectedImage === 0 && variant?.image?.url) ||
                       images[selectedImage]?.url ||
@@ -827,6 +836,58 @@ function About() {
 }
 
 function App() {
+  useEffect(() => {
+    const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (preference.matches) return;
+
+    const revealItems = document.querySelectorAll<HTMLElement>("[data-reveal]");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.add("is-visible");
+          observer.unobserve(entry.target);
+        }
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -32px 0px" },
+    );
+    revealItems.forEach((item) => observer.observe(item));
+    document.documentElement.classList.add("motion-ready");
+
+    const hero = document.querySelector<HTMLElement>(".hero");
+    const steps = document.querySelector<HTMLElement>(".steps-grid");
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const scrollRange = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      document.documentElement.style.setProperty("--page-progress", `${Math.min(100, (window.scrollY / scrollRange) * 100)}%`);
+      if (hero) {
+        const amount = Math.min(1, Math.max(0, window.scrollY / hero.offsetHeight));
+        hero.style.setProperty("--hero-parallax", `${Math.round(amount * 58)}px`);
+      }
+      if (steps) {
+        const rect = steps.getBoundingClientRect();
+        const start = window.innerHeight * 0.8;
+        const finish = window.innerHeight * 0.28;
+        const amount = Math.min(1, Math.max(0, (start - rect.top) / (start - finish)));
+        steps.style.setProperty("--steps-progress", `${Math.round(amount * 100)}%`);
+      }
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) cancelAnimationFrame(frame);
+      document.documentElement.classList.remove("motion-ready");
+    };
+  }, []);
+
   const path = decodeURIComponent(window.location.pathname);
   if (path === "/") return <Home />;
   if (path === "/shop") return <Shop />;

@@ -157,6 +157,8 @@ select:focus-visible {
   position: absolute;
   inset: 0;
   background: url("/concept/hero.png") center center/cover no-repeat;
+  transform: translate3d(0, var(--hero-parallax, 0px), 0) scale(1.045);
+  transform-origin: center;
 }
 .hero-shade {
   position: absolute;
@@ -167,6 +169,14 @@ select:focus-visible {
     rgba(12, 6, 3, 0.5) 42%,
     rgba(12, 6, 3, 0) 75%
   );
+}
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 69% 37%, rgba(253, 165, 69, 0.25), transparent 34%);
+  mix-blend-mode: screen;
+  opacity: 0.55;
 }
 .hero-content {
   position: relative;
@@ -254,6 +264,36 @@ p {
   text-transform: uppercase;
   color: rgba(255, 245, 232, 0.85);
 }
+.scroll-cue {
+  position: absolute;
+  z-index: 1;
+  bottom: 27px;
+  left: max(4.25vw, 28px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--peach);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.scroll-cue span {
+  width: 52px;
+  height: 1px;
+  background: currentColor;
+  transform-origin: left;
+}
+.reading-progress {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  width: var(--page-progress, 0%);
+  height: 3px;
+  background: var(--orange);
+  pointer-events: none;
+}
 .section-pad {
   margin: 0 auto;
   max-width: 1600px;
@@ -332,6 +372,11 @@ p {
   height: 390px;
   background-position: center;
   background-size: cover;
+  transition: transform 0.75s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.mood-card:hover .mood-card__image,
+.mood-card:focus-visible .mood-card__image {
+  transform: scale(1.055);
 }
 .mood-card--woody .mood-card__image {
   background-image: url("/concept/hero.png");
@@ -401,10 +446,39 @@ p {
   grid-template-columns: repeat(3, 1fr);
   gap: 50px;
   margin-top: 60px;
+  position: relative;
+}
+.steps-grid::before,
+.steps-grid::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 1px;
+  pointer-events: none;
+}
+.steps-grid::before {
+  width: 100%;
+  background: #8f6c54;
+}
+.steps-grid::after {
+  width: var(--steps-progress, 0%);
+  background: var(--peach);
 }
 .steps-grid > div {
-  border-top: 1px solid #8f6c54;
+  position: relative;
   padding-top: 17px;
+}
+.steps-grid > div::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--peach);
+  box-shadow: 0 0 0 4px var(--coffee);
 }
 .steps-grid span {
   color: var(--peach);
@@ -975,6 +1049,9 @@ p {
     left: 21px;
     right: 20px;
   }
+  .scroll-cue {
+    display: none;
+  }
   .section-pad {
     padding-left: 20px;
     padding-right: 20px;
@@ -1041,8 +1118,24 @@ p {
     gap: 0;
     margin-top: 30px;
   }
+  .steps-grid::before,
+  .steps-grid::after {
+    top: 0;
+    left: 0;
+    width: 1px;
+  }
+  .steps-grid::before {
+    height: 100%;
+  }
+  .steps-grid::after {
+    height: var(--steps-progress, 0%);
+  }
   .steps-grid > div {
-    padding: 12px 0;
+    padding: 12px 0 12px 22px;
+  }
+  .steps-grid > div::before {
+    top: 20px;
+    left: -4px;
   }
   .steps-grid h3 {
     font-size: 21px;
@@ -1174,12 +1267,88 @@ p {
     padding-right: 13px;
   }
 }
+@media (prefers-reduced-motion: no-preference) {
+  .motion-ready .hero-content > * {
+    animation: hero-enter 0.82s cubic-bezier(0.18, 0.78, 0.22, 1) both;
+  }
+  .motion-ready .hero-content > :nth-child(2) {
+    animation-delay: 0.12s;
+  }
+  .motion-ready .hero-content > :nth-child(3) {
+    animation-delay: 0.22s;
+  }
+  .motion-ready .hero-content > :nth-child(4) {
+    animation-delay: 0.33s;
+  }
+  .motion-ready .hero-glow {
+    animation: glow-breathe 9s ease-in-out infinite alternate;
+  }
+  .motion-ready .scroll-cue span {
+    animation: cue-pulse 2.2s ease-in-out infinite;
+  }
+  .motion-ready [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+    transition: opacity 0.72s ease, transform 0.72s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .motion-ready [data-reveal].is-visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  .motion-ready .intro > p[data-reveal],
+  .motion-ready .mood-card:nth-child(2)[data-reveal] {
+    transition-delay: 0.1s;
+  }
+  .motion-ready .mood-card:nth-child(3)[data-reveal] {
+    transition-delay: 0.2s;
+  }
+  .motion-ready .mood-card.is-visible:hover {
+    transform: translateY(-5px);
+  }
+  .product-card {
+    animation: hero-enter 0.65s ease both;
+  }
+  .product-card:nth-child(2n) {
+    animation-delay: 0.08s;
+  }
+  .product-main-image img {
+    animation: gallery-enter 0.38s ease both;
+  }
+}
+@keyframes hero-enter {
+  from { opacity: 0; transform: translate3d(0, 24px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes gallery-enter {
+  from { opacity: 0.5; transform: scale(1.025); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes glow-breathe {
+  from { opacity: 0.35; transform: translate3d(-1.5%, 0, 0); }
+  to { opacity: 0.7; transform: translate3d(1.5%, -1%, 0); }
+}
+@keyframes cue-pulse {
+  0%, 100% { transform: scaleX(0.45); opacity: 0.65; }
+  50% { transform: scaleX(1); opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
   }
+  .hero-image {
+    transform: none;
+  }
+  .hero-glow,
+  .scroll-cue,
+  .reading-progress {
+    display: none;
+  }
+  .steps-grid::after {
+    width: 100%;
+  }
   .button,
   .mood-card,
+  .mood-card__image,
   .product-card__image img {
     transition: none;
   }

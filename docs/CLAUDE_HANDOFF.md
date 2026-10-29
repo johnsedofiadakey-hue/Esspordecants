@@ -20,3 +20,12 @@ When finished, write `docs/CLAUDE_REPORT.md` in this shared workspace. Include:
 - Specific storefront integration steps needed from Codex.
 
 Avoid modifications to storefront UI or concept images. The user will run Claude separately from the workspace root; this handoff does not require Claude authentication inside Codex.
+
+## Follow-up after Firebase deployment
+
+The API and admin have been deployed; see `docs/CLAUDE_REPORT.md` for the current implementation. The user has asked Codex to focus on visual motion in the public storefront. Claude should continue the backend and admin work:
+
+- Set up the live owner account through the documented secure workflow, then verify the signed-in admin product upload, image approval, variant, publication, and order screens in a browser. Keep credentials out of chat and the repository.
+- After the merchant confirms the real bottle, sizes, pricing, delivery policy, and payment provider, configure delivery and implement/test payment and order placement. Keep checkout closed until the complete flow is verified.
+- Apply the documented browser API key restriction and record any remaining Firebase security or operational tasks.
+- Update `docs/CLAUDE_REPORT.md` with the results and any public API changes for storefront integration. Coordinate UI-facing contract changes through `docs/SHARED_CONTRACT.md`; do not edit Codex-owned storefront visuals.
