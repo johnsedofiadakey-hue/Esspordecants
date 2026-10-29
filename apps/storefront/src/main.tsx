@@ -10,9 +10,14 @@ import {
 import {
   formatMoney,
   getProduct,
+  getQuote,
+  listContent,
+  listFamilies,
   listProducts,
+  type ContentEntry,
   type Product,
   type ProductSummary,
+  type Quote,
 } from "./api";
 import "./styles.css";
 
@@ -127,7 +132,47 @@ function Footer() {
   );
 }
 
+// The first published entry for a placement, or null to keep the built-in copy.
+function usePlacement(placement: string) {
+  const [entry, setEntry] = useState<ContentEntry | null>(null);
+  useEffect(() => {
+    let active = true;
+    listContent(placement)
+      .then((result) => {
+        if (active) setEntry(result.items[0] ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [placement]);
+  return entry;
+}
+
+// Content bodies are plain text; blank lines become line breaks inside one element
+// so the existing reveal animation keeps observing the same nodes.
+function PlainText({ text }: { text: string }) {
+  const paragraphs = text.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+  return (
+    <>
+      {paragraphs.map((part, index) => (
+        <span key={index}>
+          {index > 0 && (
+            <>
+              <br />
+              <br />
+            </>
+          )}
+          {part}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function Home() {
+  const hero = usePlacement("home-hero");
+  const story = usePlacement("home-story");
   return (
     <>
       <div className="reading-progress" aria-hidden="true" />
@@ -138,25 +183,51 @@ function Home() {
             <div
               className="hero-image"
               role="img"
-              aria-label="Concept image of a small perfume decant in warm orange light"
+              aria-label={
+                hero?.image?.alt ||
+                "Concept image of a small perfume decant in warm orange light"
+              }
+              style={
+                hero?.image
+                  ? { backgroundImage: `url(${JSON.stringify(hero.image.url)})` }
+                  : undefined
+              }
             />
             <div className="hero-shade" />
             <div className="hero-glow" aria-hidden="true" />
             <div className="hero-content">
-              <p className="eyebrow eyebrow--light">Essence, portioned</p>
+              <p className="eyebrow eyebrow--light">
+                {hero?.eyebrow || "Essence, portioned"}
+              </p>
               <h1 id="hero-title">
-                Find your next
-                <br />
-                obsession.
+                {hero ? (
+                  hero.title
+                ) : (
+                  <>
+                    Find your next
+                    <br />
+                    obsession.
+                  </>
+                )}
               </h1>
               <p className="hero-copy">
-                Authentic designer and niche scents,
-                <br className="desktop-break" /> decanted for the joy of
-                discovery.
+                {hero?.body ? (
+                  <PlainText text={hero.body} />
+                ) : (
+                  <>
+                    Authentic designer and niche scents,
+                    <br className="desktop-break" /> decanted for the joy of
+                    discovery.
+                  </>
+                )}
               </p>
               <div className="hero-actions">
-                <a className="button button--orange" href="/shop">
-                  Shop decants <span aria-hidden="true">→</span>
+                <a
+                  className="button button--orange"
+                  href={hero?.cta?.href || "/shop"}
+                >
+                  {hero?.cta?.label || "Shop decants"}{" "}
+                  <span aria-hidden="true">→</span>
                 </a>
                 <a
                   className="button button--outline-light"
@@ -166,26 +237,40 @@ function Home() {
                 </a>
               </div>
             </div>
-            <span className="hero-caption">
-              Concept imagery · actual bottle to be confirmed
-            </span>
+            {!hero?.image && (
+              <span className="hero-caption">
+                Concept imagery · actual bottle to be confirmed
+              </span>
+            )}
             <span className="scroll-cue" aria-hidden="true">
               Scroll to discover <span />
             </span>
           </section>
           <section className="intro section-pad">
             <div data-reveal>
-              <p className="eyebrow">The Esspor way</p>
+              <p className="eyebrow">{story?.eyebrow || "The Esspor way"}</p>
               <h2>
-                A world of fragrance,
-                <br />
-                in your hands.
+                {story ? (
+                  story.title
+                ) : (
+                  <>
+                    A world of fragrance,
+                    <br />
+                    in your hands.
+                  </>
+                )}
               </h2>
             </div>
             <p data-reveal>
-              Explore without the full-bottle commitment. Every fragrance is
-              carefully portioned into a travel-ready decant so you can discover
-              what feels like you.
+              {story?.body ? (
+                <PlainText text={story.body} />
+              ) : (
+                <>
+                  Explore without the full-bottle commitment. Every fragrance
+                  is carefully portioned into a travel-ready decant so you can
+                  discover what feels like you.
+                </>
+              )}
             </p>
           </section>
           <section
@@ -302,10 +387,38 @@ function ProductCard({ product }: { product: ProductSummary }) {
   );
 }
 
+// Used until the families endpoint answers, and if it cannot be reached.
+const fallbackFamilies = ["Woody", "Fresh", "Floral", "Amber"];
+
+const foldName = (value: string) =>
+  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function useFamilies(selected: string) {
+  const [families, setFamilies] = useState<string[]>(fallbackFamilies);
+  useEffect(() => {
+    let active = true;
+    listFamilies()
+      .then((result) => {
+        if (active) setFamilies(result.items.map((family) => family.name));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  // Keep a family chosen from a link (e.g. a mood card) selectable even with no products yet.
+  const match = families.find((name) => foldName(name) === foldName(selected));
+  return {
+    families: selected && !match ? [...families, selected] : families,
+    selectedFamily: match ?? selected,
+  };
+}
+
 function Shop() {
   const params = new URLSearchParams(window.location.search);
   const query = params.get("query") || "";
   const family = params.get("family") || "";
+  const { families, selectedFamily } = useFamilies(family);
   const [state, setState] = useState<{
     loading: boolean;
     products: ProductSummary[];
@@ -357,7 +470,7 @@ function Shop() {
           <label>
             Family{" "}
             <select
-              value={family}
+              value={selectedFamily}
               onChange={(event) => {
                 const next = new URLSearchParams(window.location.search);
                 if (event.target.value) next.set("family", event.target.value);
@@ -366,10 +479,11 @@ function Shop() {
               }}
             >
               <option value="">All scents</option>
-              <option value="Woody">Woody</option>
-              <option value="Fresh">Fresh</option>
-              <option value="Floral">Floral</option>
-              <option value="Amber">Amber</option>
+              {families.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -519,10 +633,18 @@ function ProductPage({
                     {images[selectedImage]?.role === "source-bottle"
                       ? "Original source bottle"
                       : images[selectedImage]?.role === "editorial"
-                        ? "Editorial concept"
+                        ? preview
+                          ? "Editorial concept"
+                          : "Editorial"
                         : "Esspor decant"}
                   </span>
                 </div>
+                {images[selectedImage]?.role === "source-bottle" ? (
+                  <p className="concept-note">
+                    {images[selectedImage]?.caption ||
+                      "Original full-size bottle, shown for reference. You receive an Esspor decant."}
+                  </p>
+                ) : null}
                 <div className="thumbnail-row">
                   {images.map((image, index) => (
                     <button
@@ -668,12 +790,42 @@ function ProductPage({
   );
 }
 
+// Re-quotes whenever the bag changes. The saved bag only holds ids, quantities and
+// display details; every price and availability shown here comes from the server.
+function useQuote(items: BagItem[]) {
+  const [state, setState] = useState<{ quote: Quote | null; failed: boolean; loading: boolean }>({
+    quote: null,
+    failed: false,
+    loading: items.length > 0,
+  });
+  const lines = JSON.stringify(items.map(({ variantId, quantity }) => ({ variantId, quantity })));
+  useEffect(() => {
+    const request = JSON.parse(lines) as { variantId: string; quantity: number }[];
+    if (!request.length) {
+      setState({ quote: null, failed: false, loading: false });
+      return;
+    }
+    let active = true;
+    setState((current) => ({ ...current, loading: true }));
+    getQuote(request)
+      .then((quote) => {
+        if (active) setState({ quote, failed: false, loading: false });
+      })
+      .catch(() => {
+        if (active) setState({ quote: null, failed: true, loading: false });
+      });
+    return () => {
+      active = false;
+    };
+  }, [lines]);
+  return state;
+}
+
 function Bag() {
   const items = useBag();
-  const estimate = items.reduce(
-    (sum, item) => sum + item.priceMinor * item.quantity,
-    0,
-  );
+  const { quote, failed, loading } = useQuote(items);
+  const lineFor = (variantId: string) => quote?.items.find((line) => line.variantId === variantId);
+  const errorFor = (variantId: string) => quote?.errors.find((error) => error.variantId === variantId);
   return (
     <>
       <Header />
@@ -685,53 +837,80 @@ function Bag() {
         {items.length ? (
           <div className="bag-layout">
             <div>
-              {items.map((item) => (
-                <div className="bag-item" key={item.variantId}>
-                  <img src={item.imageUrl} alt={`${item.name} Esspor decant`} />
-                  <div>
-                    <p className="eyebrow">{item.house}</p>
-                    <h2>
-                      <a
-                        href={`/product/${encodeURIComponent(item.productSlug)}`}
-                      >
-                        {item.name}
-                      </a>
-                    </h2>
-                    <p>{item.sizeMl} ml decant</p>
-                    <label>
-                      Quantity{" "}
-                      <select
-                        value={item.quantity}
-                        onChange={(event) =>
-                          setBagQuantity(
-                            item.variantId,
-                            Number(event.target.value),
-                          )
-                        }
-                      >
-                        {[0, 1, 2, 3, 4, 5].map((n) => (
-                          <option key={n} value={n}>
-                            {n === 0 ? "Remove" : n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+              {items.map((item) => {
+                const line = lineFor(item.variantId);
+                const error = errorFor(item.variantId);
+                const unavailable = error?.code === "variant_unavailable" || error?.code === "out_of_stock";
+                return (
+                  <div className="bag-item" key={item.variantId}>
+                    <img src={item.imageUrl} alt={`${item.name} Esspor decant`} />
+                    <div>
+                      <p className="eyebrow">{item.house}</p>
+                      <h2>
+                        <a href={`/product/${encodeURIComponent(item.productSlug)}`}>{item.name}</a>
+                      </h2>
+                      <p>{item.sizeMl} ml decant</p>
+                      {unavailable ? (
+                        <button type="button" className="text-link" onClick={() => setBagQuantity(item.variantId, 0)}>
+                          Remove
+                        </button>
+                      ) : (
+                        <label>
+                          Quantity{" "}
+                          <select
+                            value={item.quantity}
+                            onChange={(event) => setBagQuantity(item.variantId, Number(event.target.value))}
+                          >
+                            {[0, 1, 2, 3, 4, 5].map((n) => (
+                              <option key={n} value={n}>
+                                {n === 0 ? "Remove" : n}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {error ? (
+                        <p className="concept-note" role="alert">
+                          {error.message}{" "}
+                          {error.code === "insufficient_stock" && error.availableQuantity ? (
+                            <button
+                              type="button"
+                              className="text-link"
+                              onClick={() => setBagQuantity(item.variantId, error.availableQuantity!)}
+                            >
+                              Use {error.availableQuantity}
+                            </button>
+                          ) : null}
+                        </p>
+                      ) : null}
+                    </div>
+                    <strong>
+                      {line?.available
+                        ? formatMoney(line.lineTotalMinor)
+                        : loading
+                          ? "…"
+                          : error?.code === "insufficient_stock" || error?.code === "quantity_limit"
+                            ? "Adjust quantity"
+                            : error
+                              ? "Unavailable"
+                              : "—"}
+                    </strong>
                   </div>
-                  <strong>
-                    {formatMoney(item.priceMinor * item.quantity)}
-                  </strong>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <aside className="bag-summary">
               <h2>Order summary</h2>
               <p>
-                <span>Estimated subtotal</span>
-                <strong>{formatMoney(estimate)}</strong>
+                <span>Subtotal</span>
+                <strong>{quote ? formatMoney(quote.subtotalMinor) : loading ? "…" : "—"}</strong>
               </p>
               <small>
-                Final price, availability and delivery must be confirmed by the
-                Esspor checkout service.
+                {failed
+                  ? "Prices and availability could not be confirmed right now. Please try again shortly."
+                  : quote && !quote.checkoutAvailable
+                    ? quote.checkoutMessage
+                    : "Prices and availability are confirmed by Esspor. Delivery is added at checkout."}
               </small>
               <button className="button button--orange" disabled>
                 Checkout being prepared

@@ -10,6 +10,7 @@
     "emulators": "firebase emulators:start --config ../../firebase.json --project demo-esspor --only auth,firestore,storage",
     "dev": "node --env-file=.env.emulators --env-file-if-exists=.env.local --watch src/server.ts",
     "seed": "node --env-file=.env.emulators scripts/seed.ts",
+    "fixtures:local": "node --env-file=.env.emulators test/fixtures-local.ts",
     "admin:create": "node --env-file=.env.emulators scripts/create-admin.ts",
     "admin:create:live": "GCLOUD_PROJECT=esspordecants node scripts/create-admin.ts",
     "build": "esbuild src/function.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/function.js",

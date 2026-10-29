@@ -143,14 +143,17 @@ Removed in this version: `auth/login`, `auth/logout` and `auth/password`. Fireba
 
 ## 6. Open items
 
-- **The live site has no admin account yet.** Create the owner yourself so the password never passes through anyone else. See the commands in the chat or below:
+- **Live owner account**: the owner creates it themselves so the password never passes through anyone else. Run:
 
   ```sh
   gcloud auth application-default login
+  gcloud auth application-default set-quota-project esspordecants
   cd apps/api && npm run admin:create:live -- --email you@example.com --name "Your Name" --role owner
   ```
 
-- **Restrict the browser API key**. In Google Cloud Console → APIs & Services → Credentials, limit HTTP referrers to `esspordecants.web.app`, `esspordecants-admin.web.app` and the `firebaseapp.com` equivalents, plus `localhost` if needed. The key is public by design, but restricting it limits abuse.
+  The quota-project step is required. Otherwise Auth admin calls are billed to whatever default project gcloud has.
+- **Browser API key**: done on 2026-10-29. The key "Browser key (auto created by Firebase)" now accepts only the `https://esspordecants.web.app/*` and `https://esspordecants-admin.web.app/*` referrers and their `firebaseapp.com` equivalents. Its 27 allowed APIs are unchanged. Local development uses the Auth emulator, so it does not need this key.
+- **Signed-in admin screens in a browser**: still to be checked by eye on Firebase. This needs the owner to sign in, because credentials are never typed by Claude.
 - **Firebase Storage default bucket**: not created. Media uses the private custom bucket, so `firebase/storage.rules` is only used by the emulator.
 - **Blocked on decisions**:
   - Payment provider.
@@ -163,7 +166,22 @@ Removed in this version: `auth/login`, `auth/logout` and `auth/password`. Fireba
   - Admin accounts can only be disabled, never deleted.
 - **The repository is public**, so the mockups and brand assets in it are public too.
 
-## 7. Storefront integration steps for Codex
+## 7. Storefront data wiring (done by Claude after the handoff follow-up)
+
+- The bag quotes `POST /api/v1/checkout/quote` and shows server prices and errors. Checkout stays disabled.
+- The shop filter is built from `/api/v1/families`.
+- Source-bottle captions are shown on the product page.
+- Published `home-hero` and `home-story` content replaces the built-in copy.
+- Details are in `SHARED_CONTRACT.md` → "Storefront data wiring".
+- **Verified locally**: `npm run fixtures:local` (emulators running) wipes the local emulators and publishes one synthetic product and two content entries through the API. In the browser:
+  - The hero and story showed the CMS copy, with reveal and parallax intact.
+  - `?family=woody` selected "Woody".
+  - The source-bottle caption appeared.
+  - A bag line with its stored price tampered to 1 still showed the server's GH₵240.00.
+  - Over-stock quantity showed "Only 2 available. Use 2", and the button fixed it.
+  - A retired variant showed "no longer available" with a working Remove.
+
+## 8. Storefront integration steps for Codex (original list, now done except order placement)
 
 1. The catalog and product pages need no code change. Build with `VITE_API_BASE_URL=https://esspordecants.web.app`; CI does this.
 2. **Bag/checkout**: call `POST /api/v1/checkout/quote` and display the server's prices.

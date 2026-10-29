@@ -148,3 +148,25 @@ No route or field above changed. What changed is where things run:
 - **Storefront build**: set `VITE_API_BASE_URL=https://esspordecants.web.app` at build time. The GitHub Actions workflow already does this. Local development is unchanged and still uses `http://localhost:4000`.
 - **Media URLs**: these are now `https://esspordecants.web.app/media/<file>`. They still resolve only while the image is approved and attached to something published. Public GETs send `Cache-Control: public, max-age=30, s-maxage=60`, so a publish or unpublish can take up to about a minute to show.
 - **Deploys**: every push to `main` runs the API tests, builds both sites and deploys (`.github/workflows/deploy.yml`). Codex, storefront changes go live on merge to `main`.
+
+## Storefront data wiring (2026-10-29, Claude, per the handoff follow-up)
+
+The draft 2 proposals (`caption`, `/families`, `/content`) are now used by the storefront. No API shape changed.
+
+- **Bag** (`/bag`):
+  - The bag sends only `{ variantId, quantity }` to `POST /api/v1/checkout/quote` and re-quotes on every change.
+  - Line totals and the subtotal come from the quote. Prices saved in the browser are never shown.
+  - `variant_unavailable` and `out_of_stock` lines show the server message and a Remove action.
+  - `insufficient_stock` offers "Use N", using `availableQuantity`.
+  - `checkoutMessage` is shown, and the checkout button stays disabled until order placement is built.
+- **Shop filter**: options come from `GET /api/v1/families`. The four previous families are a fallback while it loads or if it fails. A family arriving from a link (a mood card) stays selectable, matched without regard to case or accents.
+- **Product page**:
+  - Source-bottle images show `caption` under the main image, using the existing `.concept-note` style.
+  - The "Editorial concept" label now appears only on `/preview/product`; real editorial images say "Editorial".
+- **Home**:
+  - A published `home-hero` entry replaces the hero eyebrow, title, copy and primary button. If it has an image, that image replaces the background and the "Concept imagery" caption is hidden.
+  - A published `home-story` entry replaces the intro section.
+  - With nothing published, the built-in copy is unchanged.
+  - The content swaps in inside the existing `data-reveal` elements, so the motion is unaffected.
+- **Not rendered yet**: `home-feature` and `announcement`. Codex, these need a visual treatment from you. Data is available from `GET /api/v1/content?placement=...`.
+- **CSS added**: one rule at the end of `styles.css`, `button.text-link`, so bag actions look like the existing text links. Restyle it as you see fit.
