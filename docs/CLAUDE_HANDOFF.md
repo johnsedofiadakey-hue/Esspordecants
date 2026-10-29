@@ -23,9 +23,11 @@ Avoid modifications to storefront UI or concept images. The user will run Claude
 
 ## Follow-up after Firebase deployment
 
-The API and admin have been deployed; see `docs/CLAUDE_REPORT.md` for the current implementation. The user has asked Codex to focus on visual motion in the public storefront. Claude should continue the backend and admin work:
+The API and admin have been deployed; see `docs/CLAUDE_REPORT.md` for the current implementation. The user has asked Codex to focus on visual motion in the public storefront and asked Claude to take the remaining functional integration work. This follow-up supersedes the original `apps/storefront` restriction only for data and API wiring. Preserve the current visual design, CSS, motion behavior, and concept assets; coordinate any UI change that affects them. Claude should continue:
 
 - Set up the live owner account through the documented secure workflow, then verify the signed-in admin product upload, image approval, variant, publication, and order screens in a browser. Keep credentials out of chat and the repository.
 - After the merchant confirms the real bottle, sizes, pricing, delivery policy, and payment provider, configure delivery and implement/test payment and order placement. Keep checkout closed until the complete flow is verified.
 - Apply the documented browser API key restriction and record any remaining Firebase security or operational tasks.
+- Connect the storefront bag to `POST /api/v1/checkout/quote`: show server prices and availability errors, remove or flag unavailable variants, show `checkoutMessage`, and keep order placement disabled until payment and delivery are verified. Do not trust saved browser prices as final.
+- Wire the storefront family filters and approved editorial placements to the existing public API. Label source-bottle images distinctly, use their optional caption, and keep generated concept imagery clearly identified until real photography replaces it.
 - Update `docs/CLAUDE_REPORT.md` with the results and any public API changes for storefront integration. Coordinate UI-facing contract changes through `docs/SHARED_CONTRACT.md`; do not edit Codex-owned storefront visuals.
