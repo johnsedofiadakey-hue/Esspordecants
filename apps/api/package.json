@@ -1,0 +1,32 @@
+{
+  "name": "esspor-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "emulators": "firebase emulators:start --config ../../firebase.json --project demo-esspor --only auth,firestore,storage",
+    "dev": "node --env-file=.env.emulators --env-file-if-exists=.env.local --watch src/server.ts",
+    "seed": "node --env-file=.env.emulators scripts/seed.ts",
+    "admin:create": "node --env-file=.env.emulators scripts/create-admin.ts",
+    "admin:create:live": "GCLOUD_PROJECT=esspordecants node scripts/create-admin.ts",
+    "build": "esbuild src/function.ts --bundle --platform=node --format=esm --target=node22 --packages=external --outfile=dist/function.js",
+    "typecheck": "tsc --noEmit",
+    "test": "firebase emulators:exec --config ../../firebase.json --project demo-esspor --only auth,firestore,storage \"node --env-file=.env.emulators --test --test-concurrency=1 test/*.test.ts\""
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "firebase-admin": "14.5.0",
+    "firebase-functions": "7.4.0",
+    "hono": "4.13.13",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "main": "dist/function.js"
+}

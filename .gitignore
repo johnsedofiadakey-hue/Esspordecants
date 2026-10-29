@@ -1,0 +1,14 @@
+.DS_Store
+**/node_modules/
+**/dist/
+**/.env
+**/.env.*.local
+**/*.tsbuildinfo
+*.log
+
+# Firebase CLI cache and local-only data
+.firebase/
+**/data/
+firebase-debug.log*
+firestore-debug.log*
+.claude/settings.local.json

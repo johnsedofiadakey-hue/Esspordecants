@@ -1,0 +1,13 @@
+{
+  "projects": {
+    "default": "esspordecants"
+  },
+  "targets": {
+    "esspordecants": {
+      "hosting": {
+        "storefront": ["esspordecants"],
+        "admin": ["esspordecants-admin"]
+      }
+    }
+  }
+}

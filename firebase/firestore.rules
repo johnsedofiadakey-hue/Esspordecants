@@ -1,0 +1,10 @@
+rules_version = '2';
+// All data access goes through the API (Admin SDK), which bypasses these rules.
+// Browsers and the Firebase client SDK get no direct access.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
