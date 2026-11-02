@@ -105,6 +105,7 @@ export type OrderSummary = {
 
 export type Order = OrderSummary & {
   paymentProvider: string;
+  paymentReferences?: string[];
   customerPhone: string;
   fulfilmentMethod: "delivery" | "pickup";
   deliveryAddress: { line1?: string; line2?: string; city?: string; region?: string; notes?: string };

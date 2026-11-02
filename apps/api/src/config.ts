@@ -15,6 +15,18 @@ export type Config = {
   maxVideosPerProduct: number;
   // How long the published catalogue is held in memory between Firestore scans.
   catalogCacheMs: number;
+  // Paystack. With no key, orders are taken but payment is arranged by phone.
+  paystackSecretKey: string | null;
+  paystackBaseUrl: string;
+  // The storefront's public address, used for the page Paystack sends customers back to.
+  siteUrl: string;
+  // Paystack insists on an email; this is the domain of the placeholder built from the phone number.
+  paymentEmailDomain: string;
+  // Unpaid online orders release their reserved stock after this long.
+  unpaidOrderMinutes: number;
+  // Requests per minute per client (0 turns the limit off).
+  rateLimitOrdersPerMin: number;
+  rateLimitTrackPerMin: number;
 };
 
 function flag(value: string | undefined): boolean {
@@ -24,6 +36,10 @@ function flag(value: string | undefined): boolean {
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   const env = process.env;
   const port = Number(env.PORT ?? 4000);
+  const storefrontOrigins = (env.STOREFRONT_ORIGINS ?? "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   return {
     port,
     host: env.HOST ?? "127.0.0.1",
@@ -31,10 +47,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     isProduction: env.NODE_ENV === "production" || Boolean(env.K_SERVICE),
     projectId: env.GCLOUD_PROJECT ?? env.GOOGLE_CLOUD_PROJECT ?? "demo-esspor",
     publicBaseUrl: (env.PUBLIC_BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, ""),
-    storefrontOrigins: (env.STOREFRONT_ORIGINS ?? "http://localhost:5173")
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean),
+    storefrontOrigins,
     mediaBucket: env.MEDIA_BUCKET ?? "esspordecants-media",
     checkoutEnabled: flag(env.CHECKOUT_ENABLED),
     maxUploadBytes: 5 * 1024 * 1024,
@@ -42,6 +55,13 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     maxPhotosPerProduct: 16,
     maxVideosPerProduct: 4,
     catalogCacheMs: 30_000,
+    paystackSecretKey: env.PAYSTACK_SECRET_KEY?.trim() || null,
+    paystackBaseUrl: (env.PAYSTACK_BASE_URL ?? "https://api.paystack.co").replace(/\/$/, ""),
+    siteUrl: (env.SITE_URL ?? storefrontOrigins[0] ?? "http://localhost:5173").replace(/\/$/, ""),
+    paymentEmailDomain: env.PAYMENT_EMAIL_DOMAIN ?? "customers.esspordecants.web.app",
+    unpaidOrderMinutes: Number(env.UNPAID_ORDER_MINUTES ?? 45),
+    rateLimitOrdersPerMin: 10,
+    rateLimitTrackPerMin: 40,
     ...overrides,
   };
 }

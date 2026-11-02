@@ -45,6 +45,28 @@ export function setBagQuantity(variantId: string, quantity: number) {
   );
 }
 
+// Order numbers are the customer's only way to check an order, so the last few are
+// remembered in this browser too. Nothing else about the order is stored.
+const ordersKey = "esspor-orders-v1";
+
+export function readOrders(): { number: string; at: string }[] {
+  try {
+    const value = JSON.parse(localStorage.getItem(ordersKey) || "[]");
+    return Array.isArray(value) ? value.filter((entry) => typeof entry?.number === "string").slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function rememberOrder(number: string) {
+  try {
+    const rest = readOrders().filter((entry) => entry.number !== number);
+    localStorage.setItem(ordersKey, JSON.stringify([{ number, at: new Date().toISOString() }, ...rest].slice(0, 5)));
+  } catch {
+    // Private browsing: the screenshot is the fallback.
+  }
+}
+
 export function clearBag() {
   writeBag([]);
 }

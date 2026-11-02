@@ -327,7 +327,7 @@ describe("Esspor API", () => {
     assert.equal(invalid.status, 409);
     const cancelled = await session.admin("POST", `/orders/${orderId}/status`, { body: { status: "cancelled", note: "Test" } });
     assert.equal(cancelled.status, 200);
-    assert.equal(cancelled.data.events.length, 2);
+    assert.equal(cancelled.data.events.length, 3, "placed, payment note, cancelled");
     const restored = await session.admin("GET", `/products/${productId}`);
     assert.equal(restored.data.variants[0].stockQuantity, 3);
   });

@@ -130,6 +130,15 @@ export function OrderDetail({ id }: { id: string }) {
         }
       />
       {order.isSample ? <Notice tone="warn">Synthetic order for testing. Status changes do not move stock.</Notice> : null}
+      {order.paymentStatus === "paid_needs_review" ? (
+        <Notice tone="error">
+          A payment arrived after this order was cancelled (it was not paid in time). Refund it in the Paystack dashboard, or contact the customer and place a new order for them.
+        </Notice>
+      ) : null}
+      {order.paymentStatus === "amount_mismatch" ? (
+        <Notice tone="error">Paystack reported a different amount from this order's total. It has not been marked paid. Check the transaction in the Paystack dashboard.</Notice>
+      ) : null}
+      {order.paymentStatus === "initiation_failed" ? <Notice tone="warn">Payment could not be started. The customer can retry from Track order, or you can arrange payment by phone and mark it paid.</Notice> : null}
       <div className="editor">
         <div className="editor-main stack">
           <Card title="Items">
@@ -226,7 +235,15 @@ export function OrderDetail({ id }: { id: string }) {
                 </div>
               </>
             )}
-            <p className="muted small">Payment: {humanize(order.paymentStatus)} · provider {order.paymentProvider}</p>
+            <p className="muted small">
+              Payment: {humanize(order.paymentStatus)} · provider {order.paymentProvider}
+              {order.paymentReferences?.length ? (
+                <>
+                  <br />
+                  <span className="mono">{order.paymentReferences.join(", ")}</span>
+                </>
+              ) : null}
+            </p>
           </Card>
           <Card title="Customer">
             <p>

@@ -4,6 +4,8 @@ import {
   addToBag,
   clearBag,
   readBag,
+  readOrders,
+  rememberOrder,
   setBagQuantity,
   subscribeBag,
   type BagItem,
@@ -16,9 +18,12 @@ import {
   listFamilies,
   listProducts,
   OrderError,
+  payForOrder,
   placeOrder,
+  trackOrder,
   type ContentEntry,
   type PlacedOrder,
+  type TrackedOrder,
   type Product,
   type ProductImage,
   type ProductSummary,
@@ -103,6 +108,7 @@ function Header({ dark = false }: { dark?: boolean }) {
         <a href="/shop">Shop all</a>
         <a href="/how-it-works">How it works</a>
         <a href="/about">Our story</a>
+        <a href="/track">Track order</a>
       </nav>
       <div className="header-actions">
         <a href="/shop" aria-label="Search the collection">
@@ -136,6 +142,7 @@ function Footer() {
         <a href="/shop">Shop</a>
         <a href="/how-it-works">How it works</a>
         <a href="/about">Our story</a>
+        <a href="/track">Track order</a>
       </nav>
       <small>© {new Date().getFullYear()} Esspor Decants</small>
     </footer>
@@ -869,6 +876,7 @@ function Bag() {
   const [submitting, setSubmitting] = useState(false);
   const [problem, setProblem] = useState("");
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
+  const [redirecting, setRedirecting] = useState(false);
   const lineFor = (variantId: string) => quote?.items.find((line) => line.variantId === variantId);
   const errorFor = (variantId: string) => quote?.errors.find((error) => error.variantId === variantId);
 
@@ -896,7 +904,14 @@ function Bag() {
         deliveryOptionCode: optionCode || undefined,
         customer: { name, phone, address: needsAddress ? address : undefined },
       });
+      rememberOrder(result.order.number);
       clearBag();
+      if (result.payment.authorizationUrl) {
+        // Hosted checkout (card or mobile money). Paystack sends the customer back to Track order.
+        setRedirecting(true);
+        window.location.assign(result.payment.authorizationUrl);
+        return;
+      }
       setPlaced(result);
       window.scrollTo({ top: 0 });
     } catch (cause) {
@@ -912,6 +927,20 @@ function Bag() {
     }
   }
 
+  if (redirecting) {
+    return (
+      <>
+        <Header />
+        <main className="page-shell">
+          <p className="status-panel" role="status">
+            Taking you to secure payment…
+          </p>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   if (placed) {
     const { order, payment } = placed;
     return (
@@ -921,11 +950,17 @@ function Bag() {
           <div className="page-hero">
             <p className="eyebrow">Order received</p>
             <h1>Thank you.</h1>
-            <p>
-              Your order number is <strong>{order.number}</strong>.
-            </p>
           </div>
           <div className="order-done">
+            <div className="order-number" role="group" aria-label="Your order number">
+              <span>Your order number</span>
+              <strong>{order.number}</strong>
+              <CopyButton text={order.number} />
+            </div>
+            <p className="order-number__note">
+              <strong>Take a screenshot of this page.</strong> You'll need this number to check your order's status on Track order. We don't send
+              SMS, email or WhatsApp updates.
+            </p>
             <ul>
               {order.items.map((item) => (
                 <li key={item.sku}>
@@ -945,13 +980,8 @@ function Bag() {
               </li>
             </ul>
             <p>{payment.message}</p>
-            <p>
-              {order.fulfilmentMethod === "pickup"
-                ? "We’ll call you on the number you gave to arrange pickup."
-                : "We’ll call you on the number you gave to confirm delivery."}
-            </p>
-            <a href="/shop" className="button button--orange">
-              Keep exploring →
+            <a href={`/track?number=${encodeURIComponent(order.number)}`} className="button button--orange">
+              {payment.status === "failed" ? "Pay now →" : "Track this order →"}
             </a>
           </div>
         </main>
@@ -1149,6 +1179,211 @@ function Bag() {
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="copy-button"
+      onClick={() => {
+        navigator.clipboard?.writeText(text).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          },
+          () => {},
+        );
+      }}
+    >
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+const TRACK_STEPS = ["paid", "processing", "shipped", "delivered"] as const;
+
+function stepLabel(step: (typeof TRACK_STEPS)[number], pickup: boolean) {
+  if (step === "paid") return "Paid";
+  if (step === "processing") return "Preparing";
+  if (step === "shipped") return pickup ? "Ready for pickup" : "On its way";
+  return pickup ? "Collected" : "Delivered";
+}
+
+// Anyone with the order number (from the confirmation screenshot) can see where an
+// order is. It shows no name, phone or address.
+function Track() {
+  const initial = new URLSearchParams(window.location.search).get("number") ?? "";
+  const [value, setValue] = useState(initial);
+  const [order, setOrder] = useState<TrackedOrder | null>(null);
+  const [problem, setProblem] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const recent = readOrders();
+
+  async function lookup(number: string, quiet = false) {
+    if (!number.trim()) return;
+    if (!quiet) setLoading(true);
+    setProblem("");
+    try {
+      const result = await trackOrder(number);
+      setOrder(result);
+      rememberOrder(result.number);
+      window.history.replaceState(null, "", `/track?number=${encodeURIComponent(result.number)}`);
+    } catch (cause) {
+      if (!quiet) setOrder(null);
+      setProblem(cause instanceof Error ? cause.message : "Your order status couldn't be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (initial) lookup(initial);
+  }, []);
+
+  // Coming back from paying: keep checking for a minute in case confirmation is a moment behind.
+  const pending = order?.status === "pending_payment" && order.canPay;
+  useEffect(() => {
+    if (!pending || !order) return;
+    let tries = 0;
+    const timer = setInterval(() => {
+      if (++tries > 6) return clearInterval(timer);
+      lookup(order.number, true);
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [pending, order?.number]);
+
+  async function pay() {
+    if (!order) return;
+    setPaying(true);
+    setProblem("");
+    try {
+      const result = await payForOrder(order.number);
+      if (result.authorizationUrl) window.location.assign(result.authorizationUrl);
+      else setProblem(result.message);
+    } catch (cause) {
+      setProblem(cause instanceof Error ? cause.message : "Payment couldn't be started. Please try again.");
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  const pickup = order?.fulfilmentMethod === "pickup";
+  const step = order ? TRACK_STEPS.indexOf(order.status as (typeof TRACK_STEPS)[number]) : -1;
+  const closed = order?.status === "cancelled" || order?.status === "refunded";
+  return (
+    <>
+      <Header />
+      <main className="page-shell">
+        <div className="page-hero">
+          <p className="eyebrow">Order status</p>
+          <h1>Track your order.</h1>
+          <p>Enter the order number from your confirmation screenshot.</p>
+        </div>
+        <form
+          className="track-form"
+          onSubmit={(event: FormEvent) => {
+            event.preventDefault();
+            lookup(value);
+          }}
+        >
+          <label className="sr-only" htmlFor="track-number">
+            Order number
+          </label>
+          <input
+            id="track-number"
+            type="text"
+            name="number"
+            placeholder="ESS-1042-7KQ2"
+            autoCapitalize="characters"
+            autoComplete="off"
+            spellCheck={false}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            required
+          />
+          <button type="submit" className="button button--orange" disabled={loading}>
+            {loading ? "Checking…" : "Track →"}
+          </button>
+        </form>
+        {recent.length > 0 && !order ? (
+          <p className="track-recent">
+            Recent on this device:{" "}
+            {recent.map((entry) => (
+              <button
+                key={entry.number}
+                type="button"
+                className="text-link"
+                onClick={() => {
+                  setValue(entry.number);
+                  lookup(entry.number);
+                }}
+              >
+                {entry.number}
+              </button>
+            ))}
+          </p>
+        ) : null}
+        {problem ? (
+          <p className="track-problem" role="alert">
+            {problem}
+          </p>
+        ) : null}
+        {order ? (
+          <section className="track-card" aria-live="polite">
+            <p className="eyebrow">Order {order.number}</p>
+            <h2>{order.stage.label}</h2>
+            <p>{order.stage.detail}</p>
+            {order.canPay ? (
+              <button type="button" className="button button--orange" onClick={pay} disabled={paying}>
+                {paying ? "Opening payment…" : "Pay now →"}
+              </button>
+            ) : null}
+            {!closed ? (
+              <ol className="track-steps" aria-label="Progress">
+                {TRACK_STEPS.map((name, index) => (
+                  <li key={name} className={index <= step ? "done" : ""} aria-current={index === step ? "step" : undefined}>
+                    <span aria-hidden="true">{index <= step ? "✓" : index + 1}</span>
+                    {stepLabel(name, pickup)}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+            <ul className="order-done track-items">
+              {order.items.map((item) => (
+                <li key={`${item.name}-${item.sizeMl}`}>
+                  <span>
+                    {item.quantity} × {item.name} · {item.sizeMl} ml decant
+                  </span>
+                </li>
+              ))}
+              <li className="order-done__total">
+                <span>{pickup ? "Pickup" : "Delivery"} · Total</span>
+                <strong>{formatMoney(order.totalMinor)}</strong>
+              </li>
+            </ul>
+            <h3>History</h3>
+            <ul className="track-history">
+              {[...order.timeline].reverse().map((entry, index) => (
+                <li key={`${entry.label}-${index}`}>
+                  <strong>{entry.label}</strong>
+                  <span>
+                    {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.at))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="text-link" onClick={() => lookup(order.number)}>
+              Refresh status
+            </button>
+          </section>
+        ) : null}
+      </main>
+      <Footer />
+    </>
+  );
+}
+
 function HowItWorks() {
   return (
     <>
@@ -1282,6 +1517,7 @@ function App() {
   if (path === "/") return <Home />;
   if (path === "/shop") return <Shop />;
   if (path === "/bag") return <Bag />;
+  if (path === "/track") return <Track />;
   if (path === "/how-it-works") return <HowItWorks />;
   if (path === "/about") return <About />;
   if (path === "/preview/product") return <ProductPage preview />;

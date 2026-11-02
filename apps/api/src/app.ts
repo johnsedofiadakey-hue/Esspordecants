@@ -13,12 +13,12 @@ import { productRoutes } from "./routes/admin/products.ts";
 import { settingsRoutes } from "./routes/admin/settings.ts";
 import { userRoutes } from "./routes/admin/users.ts";
 import { publicRoutes } from "./routes/public.ts";
-import { pendingPaymentAdapter, type PaymentAdapter } from "./services/payments.ts";
+import { paymentAdapterFor, type PaymentAdapter } from "./services/payments.ts";
 
 const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{2,5}$/;
 
 export function createApp(input: { store: Store; config: Config; payments?: PaymentAdapter }) {
-  const deps: Deps = { store: input.store, config: input.config, payments: input.payments ?? pendingPaymentAdapter };
+  const deps: Deps = { store: input.store, config: input.config, payments: input.payments ?? paymentAdapterFor(input.config) };
   const { config } = deps;
   const app = new Hono<AppEnv>();
 

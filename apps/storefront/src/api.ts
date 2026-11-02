@@ -188,7 +188,7 @@ export type PlacedOrder = {
     currency: "GHS";
     items: { sku: string; house: string; name: string; sizeMl: number; quantity: number; unitPriceMinor: number; lineTotalMinor: number }[];
   };
-  payment: { provider: string; status: string; reference: string | null; message: string };
+  payment: { provider: string; status: string; reference: string | null; authorizationUrl: string | null; message: string };
 };
 
 export class OrderError extends Error {
@@ -222,6 +222,46 @@ export async function placeOrder(input: {
     throw new OrderError(error.code ?? "error", first || error.message || "Your order could not be placed. Please try again.");
   }
   return data as PlacedOrder;
+}
+
+export type TrackedOrder = {
+  number: string;
+  status: "pending_payment" | "paid" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+  stage: { label: string; detail: string };
+  fulfilmentMethod: FulfilmentMethod;
+  deliveryLabel: string;
+  items: { house: string; name: string; sizeMl: number; quantity: number }[];
+  subtotalMinor: number;
+  deliveryMinor: number;
+  totalMinor: number;
+  currency: "GHS";
+  paymentStatus: string;
+  canPay: boolean;
+  createdAt: string;
+  updatedAt: string;
+  timeline: { label: string; at: string }[];
+};
+
+// The order number is the only thing needed, so it is the only thing sent.
+export async function trackOrder(number: string): Promise<TrackedOrder> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/track/${encodeURIComponent(number.trim())}`, { headers: { Accept: "application/json" } });
+  } catch {
+    throw new OrderError("network", "We couldn't reach Esspor. Check your connection and try again.");
+  }
+  if (response.status === 404) throw new OrderError("not_found", "We couldn't find that order. Check the number in your screenshot.");
+  if (response.status === 429) throw new OrderError("rate_limited", "Too many tries. Please wait a minute and try again.");
+  if (!response.ok) throw new OrderError("error", "Your order status couldn't be loaded right now. Please try again.");
+  return response.json() as Promise<TrackedOrder>;
+}
+
+// Starts a new payment for an order that is still unpaid and returns where to pay.
+export async function payForOrder(number: string): Promise<{ status: string; authorizationUrl: string | null; message: string }> {
+  const response = await fetch(`${baseUrl}/api/v1/track/${encodeURIComponent(number)}/pay`, { method: "POST", headers: { Accept: "application/json" } });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new OrderError(data?.error?.code ?? "error", data?.error?.message ?? "Payment couldn't be started. Please try again.");
+  return data.payment;
 }
 
 export function formatMoney(minor: number): string {

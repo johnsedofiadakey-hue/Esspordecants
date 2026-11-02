@@ -18,7 +18,7 @@ export async function resetEmulators(projectId: string) {
 }
 
 export async function setup(overrides: Partial<Config> = {}) {
-  const config = loadConfig({ publicBaseUrl: "http://api.test", checkoutEnabled: false, ...overrides });
+  const config = loadConfig({ publicBaseUrl: "http://api.test", checkoutEnabled: false, rateLimitOrdersPerMin: 0, rateLimitTrackPerMin: 0, ...overrides });
   if (!config.projectId.startsWith("demo-")) throw new Error("Tests only run against a demo- emulator project.");
   await resetEmulators(config.projectId);
   const store = openStore(config);
@@ -29,10 +29,11 @@ export async function setup(overrides: Partial<Config> = {}) {
 
 type App = ReturnType<typeof createApp>;
 
-export async function call(app: App, method: string, url: string, init: { body?: unknown; headers?: Record<string, string>; form?: FormData } = {}) {
+export async function call(app: App, method: string, url: string, init: { body?: unknown; headers?: Record<string, string>; form?: FormData; raw?: string } = {}) {
   const headers: Record<string, string> = { ...init.headers };
   let body: FormData | string | undefined;
-  if (init.form) body = init.form;
+  if (init.raw !== undefined) body = init.raw;
+  else if (init.form) body = init.form;
   else if (init.body !== undefined) {
     headers["content-type"] = "application/json";
     body = JSON.stringify(init.body);
@@ -124,3 +125,18 @@ export const completeProduct = {
   copyApproved: true,
   physical: { bottleMaterial: "Clear glass", capType: "Black fine-mist sprayer", labelVersion: "v1 cream label", packagingNotes: "" },
 };
+
+type Admin = Awaited<ReturnType<typeof login>>["admin"];
+
+// A published product with one 5 ml size, built through the real admin API.
+export async function createPublishedProduct(admin: Admin, stock = 5, name = "Cèdre Lumière") {
+  const product = await admin("POST", "/products", { body: { house: "Maison Verité", name } });
+  const productId = product.data.id as string;
+  const photo = await admin("POST", `/products/${productId}/images`, { form: imageForm({ role: "decant-front", alt: "Actual 5 ml Esspor decant, front view", isRealPhoto: "true" }) });
+  await admin("PATCH", `/products/${productId}/images/${photo.data.id}`, { body: { approved: true } });
+  const variant = await admin("POST", `/products/${productId}/variants`, { body: { sku: `T-${Math.random().toString(36).slice(2, 7)}`, sizeMl: 5, priceMinor: 12000, stockQuantity: stock } });
+  await admin("PATCH", `/products/${productId}`, { body: completeProduct });
+  const published = await admin("POST", `/products/${productId}/publish`);
+  if (published.status !== 200) throw new Error(`could not publish: ${JSON.stringify(published.data)}`);
+  return { productId, variantId: variant.data.id as string };
+}

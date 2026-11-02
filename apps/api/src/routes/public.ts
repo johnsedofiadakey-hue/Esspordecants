@@ -6,7 +6,17 @@ import { ApiError, notFound } from "../lib/errors.ts";
 import { fold } from "../lib/util.ts";
 import { parse, readJson } from "../lib/validate.ts";
 import { mediaResponse, MEDIA_FILE } from "../services/images.ts";
-import { placeOrder } from "../services/orders.ts";
+import { rateLimit } from "../lib/rateLimit.ts";
+import {
+  applyPaymentSuccess,
+  expireUnpaidOrders,
+  getOrderDoc,
+  normalizeOrderNumber,
+  placeOrder,
+  publicOrder,
+  startPayment,
+  type OrderDoc,
+} from "../services/orders.ts";
 import { listPublicProductsCached } from "../services/catalog.ts";
 import { listPublicProducts, publicDetail, publicSummary, type Product } from "../services/products.ts";
 import { buildQuote, MAX_LINES } from "../services/quote.ts";
@@ -137,12 +147,16 @@ export function publicRoutes(deps: Deps) {
 
   // Order placement is wired to the payment adapter but stays closed until payment
   // and delivery are confirmed (CHECKOUT_ENABLED=true). See docs/SHARED_CONTRACT.md.
+  app.use("/api/v1/orders", rateLimit(config.rateLimitOrdersPerMin));
+  app.use("/api/v1/track/*", rateLimit(config.rateLimitTrackPerMin));
+  app.use("/api/v1/payments/*", rateLimit(config.rateLimitTrackPerMin * 5));
+
   app.post("/api/v1/orders", async (c) => {
     if (!config.checkoutEnabled) {
       throw new ApiError(503, "checkout_unavailable", "Online checkout is not open yet.");
     }
     const body = await readJson(c, orderBody);
-    const { order, payment } = await placeOrder(store, deps.payments, body);
+    const { order, payment } = await placeOrder(store, deps.payments, config, body);
     c.header("Cache-Control", "no-store");
     return c.json(
       {
@@ -164,10 +178,92 @@ export function publicRoutes(deps: Deps) {
             lineTotalMinor,
           })),
         },
-        payment,
+        payment: {
+          provider: payment.provider,
+          status: payment.status,
+          reference: payment.reference,
+          authorizationUrl: payment.authorizationUrl,
+          message: payment.message,
+        },
       },
       201,
     );
+  });
+
+  // The order number is the customer's only key, so it is long enough to be unguessable
+  // and every miss looks the same.
+  async function findPublicOrder(rawNumber: string) {
+    const number = normalizeOrderNumber(rawNumber);
+    const snapshot = await store.db.collection(COLLECTIONS.orders).where("number", "==", number).limit(1).get();
+    const doc = snapshot.docs[0];
+    if (!doc || (doc.data() as OrderDoc).isSample) throw notFound("Order");
+    return doc.id;
+  }
+
+  // Looks up an order's status. If it is still waiting for payment, ask Paystack first,
+  // so a customer coming back from paying sees the result even if the webhook is late.
+  async function refreshedOrder(id: string) {
+    let order = await getOrderDoc(store, id);
+    const payments = deps.payments;
+    if (payments.online && order.status === "pending_payment") {
+      for (const reference of [...(order.paymentReferences ?? [])].reverse().slice(0, 3)) {
+        try {
+          const check = await payments.verify(reference);
+          if (check.status === "success") {
+            await applyPaymentSuccess(store, { reference, amountMinor: check.amountMinor, currency: check.currency });
+            break;
+          }
+        } catch (error) {
+          console.error("Payment verification failed", error);
+          break;
+        }
+      }
+      order = await getOrderDoc(store, id);
+      if (order.status === "pending_payment" && Date.now() - Date.parse(order.createdAt) > config.unpaidOrderMinutes * 60_000) {
+        await expireUnpaidOrders(store, config.unpaidOrderMinutes);
+        order = await getOrderDoc(store, id);
+      }
+    }
+    return { id, ...order };
+  }
+
+  app.get("/api/v1/track/:number", async (c) => {
+    const id = await findPublicOrder(c.req.param("number"));
+    c.header("Cache-Control", "no-store");
+    return c.json(publicOrder(await refreshedOrder(id), deps.payments.online));
+  });
+
+  // Starts a fresh payment attempt for an order that is still unpaid.
+  app.post("/api/v1/track/:number/pay", async (c) => {
+    const id = await findPublicOrder(c.req.param("number"));
+    const order = await refreshedOrder(id);
+    if (!deps.payments.online || order.status !== "pending_payment") {
+      throw new ApiError(409, "not_payable", "This order doesn't need a payment right now.");
+    }
+    const payment = await startPayment(store, deps.payments, config, id);
+    c.header("Cache-Control", "no-store");
+    return c.json({ payment: { status: payment.status, authorizationUrl: payment.authorizationUrl, message: payment.message } });
+  });
+
+  // Paystack calls this when a charge succeeds. The signature is checked on the raw
+  // body; anything unsigned is refused. Always answer 200 to a signed event so it is
+  // not retried for no reason.
+  app.post("/api/v1/payments/paystack/webhook", async (c) => {
+    const raw = await c.req.text();
+    if (!deps.payments.verifyWebhook(raw, c.req.header("x-paystack-signature"))) {
+      throw new ApiError(401, "bad_signature", "Signature check failed.");
+    }
+    let event: { event?: string; data?: { status?: string; reference?: string; amount?: number; currency?: string } };
+    try {
+      event = JSON.parse(raw);
+    } catch {
+      return c.json({ ok: true });
+    }
+    const data = event.data;
+    if (event.event === "charge.success" && data?.status === "success" && data.reference) {
+      await applyPaymentSuccess(store, { reference: data.reference, amountMinor: Number(data.amount ?? 0), currency: String(data.currency ?? "") });
+    }
+    return c.json({ ok: true });
   });
 
   // Serves an image only while it is approved and attached to something published.

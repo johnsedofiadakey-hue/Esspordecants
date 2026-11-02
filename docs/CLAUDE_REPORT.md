@@ -235,3 +235,33 @@ Served bytes (egress), function time and Firestore reads are what grow with traf
     --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
   ```
 - `maxInstances: 10` on the function is the hard ceiling on a traffic spike; lower it if you would rather refuse traffic than pay for it.
+
+## 11. Paystack payments and order tracking (2026-11-02)
+
+**What it does.** Place order saves the order (stock reserved), then asks Paystack for a payment link and redirects the customer. Paystack's webhook, or the customer coming back to Track order, marks it paid. Track order (`/track`) shows a four-step progress bar and history from just the order number. The confirmation page shows the number large with "Take a screenshot of this page", and the last five numbers are remembered in the browser. Details of every route are in `SHARED_CONTRACT.md` (draft 5).
+
+**Main files**: `apps/api/src/services/payments.ts` (adapter), `services/orders.ts` (payment start, success, expiry, public order view), `routes/public.ts` (track, pay, webhook), `lib/rateLimit.ts`, `apps/api/src/function.ts` (secret), `apps/storefront/src/main.tsx` (`Track`, confirmation, redirect), admin Orders (warnings for late or mismatched payments).
+
+**Setup, in this order (do not skip the first two)**
+1. In Paystack, start with **test mode**. Confirm your Ghana account has GHS and the Mobile Money channel enabled.
+2. Store the test secret key (it is typed at the prompt, never put in the repo or chat):
+
+   ```sh
+   firebase functions:secrets:set PAYSTACK_SECRET_KEY --project esspordecants
+   ```
+3. **Deploy the function by hand once** so Firebase can grant the function access to the secret: `firebase deploy --only functions --project esspordecants`. Pushing to `main` before step 2 makes the CI deploy fail (production keeps running the previous version). If CI then still fails on secret permissions, the `github-deployer` account needs Secret Manager admin rights; keep deploying functions by hand until that is granted.
+4. In the Paystack dashboard (Settings, API Keys and Webhooks), set the **test webhook URL** to `https://esspordecants.web.app/api/v1/payments/paystack/webhook`. The return page is sent with each payment, so no callback URL is needed there.
+5. In Paystack's preferences, **turn off emails to customers**. Paystack requires an email, so checkout sends a placeholder built from the phone number (`233241234567@customers.esspordecants.web.app`, domain set by `PAYMENT_EMAIL_DOMAIN`); nothing should be mailed to it.
+6. Add active delivery options, set `CHECKOUT_ENABLED=true` in `apps/api/.env.esspordecants`, and deploy.
+7. Place a test order with Paystack's test card and test mobile money numbers, then check: the order turns Paid in the admin, `/track` shows "Payment received", and a deliberately abandoned payment frees its stock after 45 minutes.
+8. Go live by setting the secret to the **live** key and the webhook to the live URL, then redeploy.
+
+**Verification**
+- API tests: **32 of 32** (7 new) against a fake Paystack server: payment start (amount, currency, placeholder email, return link), tracking with a no-personal-data check, signed webhook (bad signature, short payment, repeat delivery), return-page confirmation without a webhook, Paystack outage then retry, expiry with stock restored and a late payment flagged, and the rate limit.
+- Browser: a real purchase in the preview browser against the real API with the Paystack adapter on and a local stand-in for Paystack: order placed, redirected to the payment page, marked paid there, returned to `/track` showing "Payment received". The no-Paystack path shows the screenshot notice.
+- **Not verified, and the main risk**: nothing has talked to the real Paystack. Paystack's own documentation could not be fetched here, so the request shape (amount in pesewas, `currency: "GHS"`, email, `callback_url`, `reference`) and the webhook fields follow its public API as known and as described by third-party references. Step 7 in test mode is what proves it.
+
+**Known limits**
+- A customer who loses their order number cannot find the order (by design; the merchant can search by phone in the admin).
+- Orders stay `Pending payment` for 45 minutes if the customer abandons the Paystack page; stock is held until then.
+- Rate limiting is per function instance, so it is a speed bump, not a full bot defence (see the audit).

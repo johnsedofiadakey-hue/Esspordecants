@@ -6,6 +6,7 @@ import { fold, now } from "../../lib/util.ts";
 import { longText, readJson } from "../../lib/validate.ts";
 import { audit } from "../../services/audit.ts";
 import {
+  expireUnpaidOrders,
   getOrderDoc,
   makeEvent,
   ORDER_STATUSES,
@@ -24,11 +25,13 @@ const notesBody = z.object({ internalNotes: longText(4000) });
 const commentBody = z.object({ note: longText(1000).min(1) });
 
 export function orderRoutes(deps: Deps) {
-  const { store } = deps;
+  const { store, config } = deps;
   const orders = store.db.collection(COLLECTIONS.orders);
   const app = new Hono<AppEnv>();
 
   app.get("/orders", async (c) => {
+    // Online orders that were never paid release their stock; do it before listing.
+    if (deps.payments.online) await expireUnpaidOrders(store, config.unpaidOrderMinutes);
     const status = c.req.query("status");
     const q = fold(c.req.query("q")?.trim() ?? "");
     const base = status && (ORDER_STATUSES as readonly string[]).includes(status) ? orders.where("status", "==", status) : orders;
