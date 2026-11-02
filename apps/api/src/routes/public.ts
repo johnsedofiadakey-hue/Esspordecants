@@ -91,7 +91,7 @@ export function publicRoutes(deps: Deps) {
   const { store, config } = deps;
   const app = new Hono<AppEnv>();
 
-  app.get("/api/v1/health", (c) => c.json({ ok: true, checkoutEnabled: config.checkoutEnabled }));
+  app.get("/api/v1/health", (c) => c.json({ ok: true, checkoutEnabled: config.checkoutEnabled, payments: deps.payments.name }));
 
   // The catalogue is small (tens to low hundreds of products), so published
   // products are loaded and filtered in memory; Firestore has no substring search.

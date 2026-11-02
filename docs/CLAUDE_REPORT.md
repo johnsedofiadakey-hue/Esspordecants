@@ -242,7 +242,7 @@ Served bytes (egress), function time and Firestore reads are what grow with traf
 
 **Main files**: `apps/api/src/services/payments.ts` (adapter), `services/orders.ts` (payment start, success, expiry, public order view), `routes/public.ts` (track, pay, webhook), `lib/rateLimit.ts`, `apps/api/src/function.ts` (secret), `apps/storefront/src/main.tsx` (`Track`, confirmation, redirect), admin Orders (warnings for late or mismatched payments).
 
-**Setup, in this order (do not skip the first two)**
+**Setup** (superseded by `docs/OPERATIONS.md`, section A: keys are now read from Secret Manager at runtime and deploys never depend on them. The steps below that mention `firebase functions:secrets:set`, a manual first deploy, or failing deploys no longer apply.)
 1. In Paystack, start with **test mode**. Confirm your Ghana account has GHS and the Mobile Money channel enabled.
 2. Store the test secret key (it is typed at the prompt, never put in the repo or chat):
 

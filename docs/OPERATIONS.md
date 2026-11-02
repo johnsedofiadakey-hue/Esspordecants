@@ -2,30 +2,25 @@
 
 Everything here is something to do **once**, by a person with access to the Firebase and Google Cloud project `esspordecants`. Nothing in this file has been run by Claude against the live project. Scripts are in `scripts/ops/`.
 
-## A. Before the first deploy that includes payments
+## A. Turning on Paystack (and the optional bot check)
 
-1. **Set the two secrets** (typed at hidden prompts, never written to disk or the repo):
+**Deploying never needs any of this.** The site deploys and runs without payment keys: customers are told you will contact them to arrange payment, and checkout stays closed until `CHECKOUT_ENABLED=true`. Do these steps when you are ready to take online payments.
 
-   ```sh
-   scripts/ops/set-secrets.sh
-   ```
-
-   - `PAYSTACK_SECRET_KEY`: your Paystack **test** secret key to begin with. Type `off` to launch with payment by phone instead.
-   - `TURNSTILE_SECRET_KEY`: from Cloudflare Turnstile (free). Type `off` to skip the bot check; the honeypot, per-phone limit and rate limits still apply.
-2. **Deploy the function by hand once**, so Firebase can grant the function access to the secrets:
-
-   ```sh
-   firebase deploy --only functions --project esspordecants
-   ```
-
-   Pushing to `main` before step 1 makes the automatic deploy fail (the live site keeps running the old version). If it still fails afterwards on permissions, the `github-deployer` service account needs Secret Manager admin rights; until then deploy functions by hand.
-3. **If you use Turnstile**: create a widget for `esspordecants.web.app`, then add its **site key** (public) to the storefront build as `VITE_TURNSTILE_SITE_KEY` in `.github/workflows/deploy.yml` under the storefront build step's `env`.
-4. **Paystack dashboard**
+1. **Paystack dashboard**
+   - Use **test mode** first. Confirm your Ghana account has GHS and the Mobile Money channel enabled.
    - Set the webhook URL to `https://esspordecants.web.app/api/v1/payments/paystack/webhook` (test and live each have their own).
    - Turn **off** customer emails. Checkout sends a placeholder email built from the phone number because Paystack requires one.
-   - Confirm GHS and Mobile Money are enabled for your business.
-5. **Test mode run** (this is the only proof against the real Paystack): place an order with a Paystack test card and a test mobile money number, then check the order turns Paid in the admin and `/track` shows "Payment received". Abandon one payment and confirm its stock returns after 45 minutes.
-6. **Go live**: set the live secret key (rerun `set-secrets.sh`), set the live webhook URL, redeploy functions, and set `CHECKOUT_ENABLED=true` in `apps/api/.env.esspordecants`.
+2. **Store the key** (typed at a hidden prompt; needs an owner of the Google Cloud project):
+
+   ```sh
+   scripts/ops/set-secrets.sh paystack
+   ```
+
+   It enables Secret Manager, stores the key, and lets the API's own identity read that one secret. It then prints a line such as `PAYSTACK_SECRET_NAME=paystack-secret-key`: add it to `apps/api/.env.esspordecants` (it holds a name, not the key) and push to deploy.
+3. **Bot check (optional)**: create a free Cloudflare Turnstile widget for `esspordecants.web.app`; run `scripts/ops/set-secrets.sh turnstile` with its **secret** key and add the `TURNSTILE_SECRET_NAME=...` line it prints; add the widget's **site key** (public) to the storefront build as `VITE_TURNSTILE_SITE_KEY` under the storefront build step's `env` in `.github/workflows/deploy.yml`.
+4. **Check it took**: `https://esspordecants.web.app/api/v1/health` should show `"payments":"paystack"`. If it still shows `"none"`, the function logs say why (search for `SECRET UNAVAILABLE`), and the admin overview warns when checkout is open without online payment.
+5. **Test-mode run** (the only proof against the real Paystack): place an order with a Paystack test card and a test mobile money number, then check the order turns Paid in the admin and `/track` shows "Payment received". Abandon one payment and confirm its stock returns after 45 minutes.
+6. **Go live**: run `scripts/ops/set-secrets.sh paystack` again with the **live** key, switch the Paystack webhook to the live URL, set `CHECKOUT_ENABLED=true` in `apps/api/.env.esspordecants`, and deploy.
 
 ## B. Create your owner account
 

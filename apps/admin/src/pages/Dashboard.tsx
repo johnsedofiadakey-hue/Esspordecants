@@ -7,6 +7,12 @@ export function Dashboard() {
   return (
     <>
       <PageHeader title="Overview" subtitle="What needs attention across the catalogue and orders." />
+      {data.checkoutEnabled && data.paymentProvider === "none" ? (
+        <Notice tone="warn">
+          Checkout is open but online payment is switched off, so customers will be told you will contact them to arrange payment. If you meant to take Paystack
+          payments, check the Paystack key (see docs/OPERATIONS.md, section A).
+        </Notice>
+      ) : null}
       {!data.checkoutEnabled ? (
         <Notice tone="warn">
           Checkout is closed. The storefront can request quotes, but orders cannot be placed until a payment provider and delivery policy are confirmed

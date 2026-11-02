@@ -17,6 +17,9 @@ export type Config = {
   catalogCacheMs: number;
   // Paystack. With no key, orders are taken but payment is arranged by phone.
   paystackSecretKey: string | null;
+  // Names of the Secret Manager secrets holding the keys. Unset means the feature is off.
+  paystackSecretName: string | null;
+  turnstileSecretName: string | null;
   paystackBaseUrl: string;
   // The storefront's public address, used for the page Paystack sends customers back to.
   siteUrl: string;
@@ -67,6 +70,8 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     maxVideosPerProduct: 4,
     catalogCacheMs: 30_000,
     paystackSecretKey: secretOrNull(env.PAYSTACK_SECRET_KEY),
+    paystackSecretName: env.PAYSTACK_SECRET_NAME?.trim() || null,
+    turnstileSecretName: env.TURNSTILE_SECRET_NAME?.trim() || null,
     paystackBaseUrl: (env.PAYSTACK_BASE_URL ?? "https://api.paystack.co").replace(/\/$/, ""),
     siteUrl: (env.SITE_URL ?? storefrontOrigins[0] ?? "http://localhost:5173").replace(/\/$/, ""),
     paymentEmailDomain: env.PAYMENT_EMAIL_DOMAIN ?? "customers.esspordecants.web.app",
