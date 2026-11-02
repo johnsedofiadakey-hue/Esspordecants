@@ -1,7 +1,29 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { api, formatDate, formatMoney, humanize, type Order, type OrderSummary } from "../api.ts";
+import { api, download, formatDate, formatMoney, humanize, whatsappDigits, type Order, type OrderSummary } from "../api.ts";
 import { Badge, Button, Card, Empty, Field, Input, Loading, Notice, PageHeader, Select, Textarea, useLoad, useToast } from "../components/ui.tsx";
 import { navigate } from "../router.ts";
+
+function ExportButton({ status }: { status: string }) {
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  return (
+    <Button
+      busy={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await download(`/orders/export${status ? `?status=${status}` : ""}`, "esspor-orders.csv");
+        } catch (err) {
+          toast.error(err);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      Export to spreadsheet
+    </Button>
+  );
+}
 
 export function OrderList() {
   const [status, setStatus] = useState("");
@@ -13,7 +35,11 @@ export function OrderList() {
 
   return (
     <>
-      <PageHeader title="Orders" subtitle="Server-priced orders. Payment collection is not configured yet." />
+      <PageHeader
+        title="Orders"
+        subtitle="Server-priced orders. Customers check their status on Track order using their order number."
+        actions={<ExportButton status={status} />}
+      />
       <div className="filters">
         <Input type="search" placeholder="Order number, name, phone or email" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search orders" />
         <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
@@ -73,10 +99,12 @@ export function OrderDetail({ id }: { id: string }) {
   const [note, setNote] = useState("");
   const [comment, setComment] = useState("");
   const [internal, setInternal] = useState("");
+  const [publicNote, setPublicNote] = useState("");
   const [busy, setBusy] = useState("");
   const toast = useToast();
 
   useEffect(() => setInternal(order?.internalNotes ?? ""), [order?.internalNotes]);
+  useEffect(() => setPublicNote(order?.publicNote ?? ""), [order?.publicNote]);
 
   if (!order) return <Loading error={error} />;
 
@@ -100,6 +128,15 @@ export function OrderDetail({ id }: { id: string }) {
     try {
       setData(await api<Order>("POST", `/orders/${id}/notes`, { note: comment }));
       setComment("");
+    } catch (err) {
+      toast.error(err);
+    }
+  }
+
+  async function savePublicNote() {
+    try {
+      setData(await api<Order>("PATCH", `/orders/${id}`, { publicNote }));
+      toast.ok("Customer note saved. It shows on Track order.");
     } catch (err) {
       toast.error(err);
     }
@@ -129,6 +166,11 @@ export function OrderDetail({ id }: { id: string }) {
           </span>
         }
       />
+      <p className="no-print">
+        <Button size="sm" onClick={() => window.print()}>
+          Print packing slip
+        </Button>
+      </p>
       {order.isSample ? <Notice tone="warn">Synthetic order for testing. Status changes do not move stock.</Notice> : null}
       {order.paymentStatus === "paid_needs_review" ? (
         <Notice tone="error">
@@ -257,6 +299,15 @@ export function OrderDetail({ id }: { id: string }) {
               ) : null}
               <a href={`tel:${order.customerPhone.replace(/[^0-9+]/g, "")}`}>{order.customerPhone}</a>
             </p>
+            <p className="no-print">
+              <a
+                href={`https://wa.me/${whatsappDigits(order.customerPhone)}?text=${encodeURIComponent(`Hello ${order.customerName}, this is Esspor about your order ${order.number}.`)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Message on WhatsApp
+              </a>
+            </p>
             <p>
               <Badge value={order.fulfilmentMethod} label={order.fulfilmentMethod === "pickup" ? "Pickup" : "Delivery"} />
             </p>
@@ -271,6 +322,15 @@ export function OrderDetail({ id }: { id: string }) {
                 </>
               ) : null}
             </p>
+          </Card>
+          <Card title="Note for the customer">
+            <p className="muted small">
+              Shown on Track order, because we send no messages. Good for rider details, an estimated time or pickup instructions. Never put anything private here.
+            </p>
+            <Textarea rows={3} maxLength={300} value={publicNote} onChange={(e) => setPublicNote(e.target.value)} aria-label="Note for the customer" />
+            <Button size="sm" onClick={savePublicNote} disabled={publicNote === (order.publicNote ?? "")}>
+              Save note
+            </Button>
           </Card>
           <Card title="Internal notes">
             <Textarea rows={4} value={internal} onChange={(e) => setInternal(e.target.value)} aria-label="Internal notes" />

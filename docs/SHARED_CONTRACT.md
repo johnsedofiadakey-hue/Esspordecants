@@ -196,3 +196,15 @@ Decisions: payment is **Paystack** (card and mobile money, hosted checkout). Cus
 - **`POST /api/v1/payments/paystack/webhook`**: server to server. The `x-paystack-signature` header (HMAC-SHA512 of the raw body with the secret key) is checked; unsigned requests get `401`. `charge.success` marks the order paid only if the reference belongs to it and the amount and currency match; otherwise the order is flagged for review. Repeat deliveries are harmless.
 - **Unpaid orders expire** after `UNPAID_ORDER_MINUTES` (default 45) and their stock returns. A payment that arrives after that sets `paymentStatus: "paid_needs_review"` for the admin to refund. This only applies when Paystack is configured; orders paid by phone never auto-expire.
 - **Rate limits** (per function instance): 10 order requests and 40 tracking requests per minute per client.
+
+## Store details, previews and launch features (draft 6, 2026-11-02, Claude)
+
+Additive. The storefront is updated to match.
+
+- **`GET /api/v1/site`**: `{ businessName, announcement, whatsapp, phone, email, instagram, pickupNote, updatedAt }`. `whatsapp` is international digits (`233245550199`); build links as `https://wa.me/<whatsapp>`. An empty `announcement` means no banner. Edited by the owner in the admin (`GET|PUT /api/admin/site`, owner only). The storefront fetches it once per visit and keeps it for ten minutes.
+- **Information pages**: `/privacy`, `/terms`, `/delivery-returns` and `/contact` ship with default text. A published content entry with `placement: "page"` and the same slug replaces the body of the first three. They are fetched together with `GET /api/v1/content?placement=page`.
+- **`POST /api/v1/orders`** gains two optional anti-bot fields: `website` (a hidden field; any value is refused with `422`) and `turnstileToken` (required, `403 challenge_failed` otherwise, only when the API has a Turnstile secret). An online buyer may hold at most three unpaid orders per phone number (`429 too_many_pending`).
+- **`GET /api/v1/track/:number`** gains `note`, the optional customer-visible message the merchant writes on an order (rider details, an ETA).
+- **Link previews**: `/product/:slug` is served by the API (a Hosting rewrite), which returns the storefront's own `index.html` with that product's title, description, canonical link, `og:` tags and `Product` structured data. Unknown slugs return a real `404` with `noindex`. The page's security headers are copied from the static `index.html`. `/sitemap.xml` and `/robots.txt` are also generated, using `SITE_URL`.
+- **Admin additions** (not part of the public contract): `POST /api/admin/products/import` (dry run first; drafts only, never overwrites), `GET /api/admin/orders/export` (CSV), `GET /api/admin/orders/attention` (what needs action), `PATCH /api/admin/orders/:id` now also takes `publicNote`, and the overview summary includes 30-day sales.
+- **Removed from the storefront**: `/preview/product` is served only in development.

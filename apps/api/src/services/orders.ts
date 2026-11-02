@@ -3,7 +3,7 @@ import { FieldValue, type Transaction } from "firebase-admin/firestore";
 import type { Config } from "../config.ts";
 import { COLLECTIONS, type Store } from "../firebase.ts";
 import { ApiError, notFound } from "../lib/errors.ts";
-import { newId, now } from "../lib/util.ts";
+import { newId, now, phoneKey } from "../lib/util.ts";
 import { invalidateCatalog } from "./catalog.ts";
 import type { PaymentAdapter, PaymentInitiation } from "./payments.ts";
 import { finalize, type Product, type ProductDoc } from "./products.ts";
@@ -78,6 +78,8 @@ export type OrderDoc = {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  // Phone in international digits, for recognising repeat buyers.
+  customerPhoneKey?: string;
   fulfilmentMethod?: FulfilmentMethod;
   deliveryAddress: DeliveryAddress;
   deliveryOptionCode: string | null;
@@ -87,6 +89,8 @@ export type OrderDoc = {
   totalMinor: number;
   currency: "GHS";
   internalNotes: string;
+  // Shown to the customer on Track order (rider details, pickup time, and so on).
+  publicNote?: string;
   isSample: boolean;
   items: OrderItem[];
   // Indexed copies of the item ids, so products and sizes that were ordered can't be deleted.
@@ -156,7 +160,18 @@ export function applyStock(product: ProductDoc, variantId: string, delta: number
 
 export async function placeOrder(store: Store, payments: PaymentAdapter, config: Config, input: QuoteInput & { customer: Customer }) {
   // Free stock held by abandoned online payments before this order looks for it.
-  if (payments.online) await expireUnpaidOrders(store, config.unpaidOrderMinutes);
+  if (payments.online) {
+    await expireUnpaidOrders(store, config.unpaidOrderMinutes);
+    // Each unpaid online order holds stock, so one phone number can only hold a few at once.
+    const pending = await orders(store)
+      .where("customerPhoneKey", "==", phoneKey(input.customer.phone))
+      .where("status", "==", "pending_payment")
+      .limit(config.maxPendingOrdersPerPhone)
+      .get();
+    if (pending.size >= config.maxPendingOrdersPerPhone) {
+      throw new ApiError(429, "too_many_pending", "You already have unpaid orders. Pay for one of them, or wait for them to expire, before placing another.");
+    }
+  }
   const id = newId();
   const result = await store.db.runTransaction(async (tx) => {
     // Firestore transactions must do every read before the first write.
@@ -206,6 +221,7 @@ export async function placeOrder(store: Store, payments: PaymentAdapter, config:
       customerName: input.customer.name,
       customerEmail: "",
       customerPhone: input.customer.phone,
+      customerPhoneKey: phoneKey(input.customer.phone),
       fulfilmentMethod: method,
       deliveryAddress: method === "delivery" ? { line1: address } : {},
       deliveryOptionCode: option?.code ?? null,
@@ -400,6 +416,7 @@ export function orderDetail(order: OrderDoc & { id: string }) {
     subtotalMinor: order.subtotalMinor,
     deliveryMinor: order.deliveryMinor,
     internalNotes: order.internalNotes,
+    publicNote: order.publicNote ?? "",
     allowedTransitions: ORDER_TRANSITIONS[order.status],
     items: order.items,
     events: order.events.map(({ actorUserId: _actor, ...event }) => event),
@@ -454,6 +471,7 @@ export function publicOrder(order: OrderDoc & { id: string }, online: boolean) {
     totalMinor: order.totalMinor,
     currency: order.currency,
     paymentStatus: order.paymentStatus,
+    note: order.publicNote ?? "",
     canPay: online && order.status === "pending_payment",
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,

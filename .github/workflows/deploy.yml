@@ -52,6 +52,12 @@ jobs:
           npm run typecheck
           npm test
 
+      # Builds the storefront and walks the customer journey in headless Chrome (installed
+      # on the runner), including a pretend Paystack payment, against the emulators.
+      - name: Browser tests
+        working-directory: apps/api
+        run: npm run e2e
+
       - name: Build admin
         run: npm run build --prefix apps/admin
 

@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { api, ApiError, setUnauthorizedHandler, type User } from "./api.ts";
+import { useOrderAlerts } from "./alerts.ts";
 import { signOut as firebaseSignOut, watchUser } from "./auth.ts";
 import { Link, Loading, ToastProvider } from "./components/ui.tsx";
 import { ContentEditor, ContentList } from "./pages/Content.tsx";
@@ -8,6 +9,7 @@ import { Dashboard } from "./pages/Dashboard.tsx";
 import { Login } from "./pages/Login.tsx";
 import { OrderDetail, OrderList } from "./pages/Orders.tsx";
 import { ProductEditor } from "./pages/ProductEditor.tsx";
+import { ProductImport } from "./pages/ProductImport.tsx";
 import { ProductList } from "./pages/Products.tsx";
 import { Settings } from "./pages/Settings.tsx";
 import { navigate, usePath } from "./router.ts";
@@ -28,7 +30,7 @@ function Route({ path, user }: { path: string; user: User }) {
     case undefined:
       return <Dashboard />;
     case "products":
-      return id ? <ProductEditor id={id} /> : <ProductList />;
+      return id === "import" ? <ProductImport /> : id ? <ProductEditor id={id} /> : <ProductList />;
     case "orders":
       return id ? <OrderDetail id={id} /> : <OrderList />;
     case "content":
@@ -52,6 +54,7 @@ function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [denied, setDenied] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
+  const alerts = useOrderAlerts(Boolean(user));
 
   // Firebase keeps the sign-in; the API decides whether that account is an admin.
   useEffect(() => {
@@ -106,10 +109,15 @@ function App() {
           {nav.map((item) => (
             <Link key={item.href} href={item.href} className={item.match(path) ? "active" : ""} aria-current={item.match(path) ? "page" : undefined}>
               {item.label}
+              {item.href === "/orders" && alerts.count > 0 ? <span className="nav-badge" aria-label={`${alerts.count} orders need attention`}>{alerts.count}</span> : null}
             </Link>
           ))}
         </nav>
         <div className="sidebar-foot">
+          <label className="alert-toggle">
+            <input type="checkbox" checked={alerts.enabled} onChange={(event) => void alerts.setEnabled(event.target.checked)} />
+            <span>Chime and pop up for new orders while this tab is open</span>
+          </label>
           <div className="who">
             <strong>{user.name}</strong>
             <span>

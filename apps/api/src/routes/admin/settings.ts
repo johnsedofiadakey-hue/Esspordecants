@@ -8,6 +8,7 @@ import { conflict, notFound } from "../../lib/errors.ts";
 import { now } from "../../lib/util.ts";
 import { longText, readJson, shortText } from "../../lib/validate.ts";
 import { audit } from "../../services/audit.ts";
+import { getSiteSettings, saveSiteSettings } from "../../services/site.ts";
 import { stockStatus, type ProductDoc } from "../../services/products.ts";
 import type { DeliveryDoc } from "../../services/quote.ts";
 
@@ -35,6 +36,16 @@ const toDelivery = (id: string, doc: DeliveryDoc) => ({
   method: doc.method ?? "delivery",
   active: doc.active,
   sortOrder: doc.sortOrder,
+});
+
+const siteFields = z.object({
+  businessName: shortText(80).min(2),
+  announcement: shortText(160),
+  whatsapp: shortText(30).regex(/^(\+?[0-9][0-9 ()-]{6,})?$/, "Enter a phone number, or leave it empty."),
+  phone: shortText(30).regex(/^(\+?[0-9][0-9 ()-]{6,})?$/, "Enter a phone number, or leave it empty."),
+  email: shortText(160).refine((value) => value === "" || z.email().safeParse(value).success, "Enter a valid email, or leave it empty."),
+  instagram: shortText(120),
+  pickupNote: longText(400),
 });
 
 export function settingsRoutes(deps: Deps) {
@@ -71,14 +82,37 @@ export function settingsRoutes(deps: Deps) {
       })
       .sort((a, b) => a.stockQuantity - b.stockQuantity)
       .slice(0, 50);
+    // Sales over the last 30 days. Money counts once an order is paid; cancelled and refunded orders are left out.
+    const since = new Date(Date.now() - 30 * 24 * 3600_000).toISOString();
+    const recent = (await orders.where("createdAt", ">=", since).limit(3000).get()).docs.map((doc) => doc.data());
+    const counted = recent.filter((order) => !order.isSample && ["paid", "processing", "shipped", "delivered"].includes(order.status));
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
     return c.json({
       products: { draft, published, archived },
       orders: { open, total },
+      sales: {
+        last30Days: {
+          orders: counted.length,
+          revenueMinor: counted.reduce((sum, order) => sum + (order.totalMinor as number), 0),
+        },
+        today: { orders: counted.filter((order) => (order.createdAt as string) >= startOfToday.toISOString()).length },
+      },
       lowStock,
       checkoutEnabled: config.checkoutEnabled,
       deliveryOptionsActive: deliveryActive,
       paymentProvider: deps.payments.name,
     });
+  });
+
+  // Contact details and the top banner. Owners only: they appear on every customer page.
+  app.get("/site", requireOwner(), async (c) => c.json(await getSiteSettings(store)));
+
+  app.put("/site", requireOwner(), async (c) => {
+    const input = await readJson(c, siteFields);
+    const saved = await saveSiteSettings(store, input);
+    await audit(store, c.get("user").id, "update", "site", "site", { fields: Object.keys(input) });
+    return c.json(saved);
   });
 
   app.get("/delivery-options", async (c) => {

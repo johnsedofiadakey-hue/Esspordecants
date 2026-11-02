@@ -1203,3 +1203,58 @@ a:focus-visible {
     animation: none;
   }
 }
+
+.grid-span {
+  grid-column: 1 / -1;
+}
+
+.nav-badge {
+  margin-left: 8px;
+  background: var(--orange, #c96f2d);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+}
+
+.alert-toggle {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.import-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.import-result li {
+  margin: 4px 0;
+}
+
+@media print {
+  .sidebar,
+  .topbar,
+  .page-actions,
+  .no-print,
+  .toasts {
+    display: none !important;
+  }
+  .shell {
+    display: block;
+  }
+  .card {
+    box-shadow: none;
+    break-inside: avoid;
+  }
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

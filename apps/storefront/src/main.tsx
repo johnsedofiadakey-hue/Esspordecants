@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   addToBag,
@@ -14,6 +14,7 @@ import {
   formatMoney,
   getProduct,
   getQuote,
+  getSite,
   listContent,
   listFamilies,
   listProducts,
@@ -28,6 +29,7 @@ import {
   type ProductImage,
   type ProductSummary,
   type Quote,
+  type SiteSettings,
 } from "./api";
 import "./styles.css";
 
@@ -79,6 +81,82 @@ const previewProduct: Product = {
   })),
 };
 
+// ---------- Store details ----------
+// Contact details and the top banner are edited in the admin. They are fetched once per
+// visit and kept for ten minutes, so ordinary page loads don't each call the API.
+
+const DEFAULT_SITE: SiteSettings = {
+  businessName: "Esspor Decants",
+  announcement: "Order before 8PM for next-day delivery | Mon–Fri",
+  whatsapp: "",
+  phone: "",
+  email: "",
+  instagram: "",
+  pickupNote: "",
+};
+const SITE_KEY = "esspor-site-v1";
+
+function cachedSite(): SiteSettings | null {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SITE_KEY) || "null");
+    if (saved && Date.now() - saved.at < 10 * 60_000) return { ...DEFAULT_SITE, ...saved.site };
+  } catch {
+    // Storage may be unavailable; the defaults still work.
+  }
+  return null;
+}
+
+let siteState: SiteSettings = cachedSite() ?? DEFAULT_SITE;
+let siteRequested = siteState !== DEFAULT_SITE;
+const siteListeners = new Set<() => void>();
+
+function useSite(): SiteSettings {
+  const [site, setSite] = useState(siteState);
+  useEffect(() => {
+    const update = () => setSite(siteState);
+    siteListeners.add(update);
+    if (!siteRequested) {
+      siteRequested = true;
+      getSite()
+        .then((value) => {
+          siteState = { ...DEFAULT_SITE, ...value };
+          try {
+            sessionStorage.setItem(SITE_KEY, JSON.stringify({ at: Date.now(), site: siteState }));
+          } catch {
+            // Fine without storage.
+          }
+          siteListeners.forEach((listener) => listener());
+        })
+        .catch(() => {
+          siteRequested = false;
+        });
+    }
+    return () => void siteListeners.delete(update);
+  }, []);
+  return site;
+}
+
+// WhatsApp numbers are stored as international digits. The text is optional.
+const whatsappLink = (site: SiteSettings, text = "") =>
+  site.whatsapp ? `https://wa.me/${site.whatsapp}${text ? `?text=${encodeURIComponent(text)}` : ""}` : "";
+
+function usePageTitle(title: string, options: { noindex?: boolean } = {}) {
+  useEffect(() => {
+    if (title) document.title = title === "Esspor Decants" ? "Esspor Decants — Essence, Portioned" : `${title} | Esspor Decants`;
+    let tag = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    if (options.noindex) {
+      if (!tag) {
+        tag = document.createElement("meta");
+        tag.name = "robots";
+        document.head.appendChild(tag);
+      }
+      tag.content = "noindex";
+    } else if (tag?.content === "noindex") {
+      tag.remove();
+    }
+  }, [title, options.noindex]);
+}
+
 function useBag() {
   const [items, setItems] = useState<BagItem[]>(() => readBag());
   useEffect(() => subscribeBag(() => setItems(readBag())), []);
@@ -88,12 +166,24 @@ function useBag() {
 function Header({ dark = false }: { dark?: boolean }) {
   const [open, setOpen] = useState(false);
   const items = useBag();
+  const site = useSite();
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
+  const banner = site.announcement.trim();
+  // The hero header sits under the banner, so tell the CSS how tall the banner is.
+  useEffect(() => {
+    if (banner) document.documentElement.style.removeProperty("--announce-h");
+    else document.documentElement.style.setProperty("--announce-h", "0px");
+  }, [banner]);
   return (
     <>
-    <div className="announce-bar" role="note">
-      <p>Order before 8PM for next-day delivery | Mon–Fri</p>
-    </div>
+    <a className="skip-link" href="#main">
+      Skip to content
+    </a>
+    {banner ? (
+      <div className="announce-bar" role="note">
+        <p>{banner}</p>
+      </div>
+    ) : null}
     <header className={`site-header ${dark ? "site-header--dark" : ""}`}>
       <a className="brand" href="/" aria-label="Esspor Decants home">
         <img
@@ -132,19 +222,37 @@ function Header({ dark = false }: { dark?: boolean }) {
 }
 
 function Footer() {
+  const site = useSite();
+  const wa = whatsappLink(site);
   return (
     <footer className="site-footer">
       <div>
         <img src="/brand/esspor-coffee.svg" alt="Esspor Decants" />
         <p>Essence, portioned for discovery.</p>
+        {wa || site.phone || site.email || site.instagram ? (
+          <p className="footer-contact">
+            {wa ? <a href={wa}>WhatsApp</a> : null}
+            {site.phone ? <a href={`tel:${site.phone.replace(/[^0-9+]/g, "")}`}>{site.phone}</a> : null}
+            {site.email ? <a href={`mailto:${site.email}`}>{site.email}</a> : null}
+            {site.instagram ? <a href={`https://instagram.com/${site.instagram}`}>Instagram</a> : null}
+          </p>
+        ) : null}
       </div>
       <nav aria-label="Footer navigation">
         <a href="/shop">Shop</a>
         <a href="/how-it-works">How it works</a>
         <a href="/about">Our story</a>
         <a href="/track">Track order</a>
+        <a href="/contact">Contact</a>
       </nav>
-      <small>© {new Date().getFullYear()} Esspor Decants</small>
+      <small>
+        © {new Date().getFullYear()} {site.businessName}
+        <span className="footer-legal">
+          <a href="/delivery-returns">Delivery &amp; returns</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+        </span>
+      </small>
     </footer>
   );
 }
@@ -188,6 +296,7 @@ function PlainText({ text }: { text: string }) {
 }
 
 function Home() {
+  usePageTitle("Esspor Decants");
   const hero = usePlacement("home-hero");
   const story = usePlacement("home-story");
   return (
@@ -195,7 +304,7 @@ function Home() {
       <div className="reading-progress" aria-hidden="true" />
       <div className="hero-wrap">
         <Header dark />
-        <main>
+        <main id="main">
           <section className="hero" aria-labelledby="hero-title">
             <div
               className="hero-image"
@@ -432,6 +541,7 @@ function useFamilies(selected: string) {
 }
 
 function Shop() {
+  usePageTitle("Shop all fragrances");
   const params = new URLSearchParams(window.location.search);
   const query = params.get("query") || "";
   const family = params.get("family") || "";
@@ -462,7 +572,7 @@ function Shop() {
   return (
     <>
       <Header />
-      <main className="page-shell">
+      <main id="main" className="page-shell">
         <div className="page-hero">
           <p className="eyebrow">The collection</p>
           <h1>Find your fragrance.</h1>
@@ -558,6 +668,7 @@ function ProductPage({
   );
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  usePageTitle(product ? `${product.name} by ${product.house}` : "Fragrance", { noindex: preview });
   useEffect(() => {
     if (preview || !slug) return;
     let active = true;
@@ -609,7 +720,7 @@ function ProductPage({
   return (
     <>
       <Header />
-      <main className="page-shell product-page">
+      <main id="main" className="page-shell product-page">
         {preview && (
           <div className="preview-banner">
             Product layout preview · fragrance, bottle, sizes, and price are
@@ -830,6 +941,61 @@ function ProductPage({
   );
 }
 
+declare global {
+  interface Window {
+    turnstile?: {
+      render: (el: HTMLElement, options: Record<string, unknown>) => string;
+      remove: (id: string) => void;
+    };
+  }
+}
+
+// Optional bot check. It only appears when a Cloudflare Turnstile site key is configured
+// at build time (VITE_TURNSTILE_SITE_KEY); without one, checkout is unchanged.
+const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+
+function TurnstileBox({ onToken }: { onToken: (token: string) => void }) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!TURNSTILE_KEY || !box.current) return;
+    let widget: string | undefined;
+    const draw = () => {
+      if (!box.current || !window.turnstile) return;
+      widget = window.turnstile.render(box.current, {
+        sitekey: TURNSTILE_KEY,
+        callback: (token: string) => onToken(token),
+        "expired-callback": () => onToken(""),
+        "error-callback": () => onToken(""),
+      });
+    };
+    if (window.turnstile) draw();
+    else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+      script.async = true;
+      script.onload = draw;
+      document.head.appendChild(script);
+    }
+    return () => {
+      if (widget) window.turnstile?.remove(widget);
+    };
+  }, []);
+  return TURNSTILE_KEY ? <div ref={box} className="turnstile-box" /> : null;
+}
+
+// Shown where a customer might be stuck: a WhatsApp link that already quotes the order number.
+function HelpLine({ orderNumber }: { orderNumber?: string }) {
+  const site = useSite();
+  const link = whatsappLink(site, orderNumber ? `Hello Esspor, I need help with order ${orderNumber}.` : "Hello Esspor, I have a question.");
+  if (!link) return null;
+  return (
+    <p className="help-line">
+      Need help? <a href={link}>Message us on WhatsApp</a>
+      {orderNumber ? ` and quote ${orderNumber}.` : "."}
+    </p>
+  );
+}
+
 // Re-quotes whenever the bag or the chosen delivery option changes. The saved bag only
 // holds ids, quantities and display details; every price and availability shown here
 // comes from the server.
@@ -862,11 +1028,13 @@ function useQuote(items: BagItem[], deliveryOptionCode: string) {
   return state;
 }
 
-const PHONE_PATTERN = "\\+?[0-9][0-9 ()\\-]{6,}";
+// Written for Chrome's strict ("v") pattern mode, where ( ) and - inside [] must be escaped.
+const PHONE_PATTERN = "\\+?[0-9][0-9 \\(\\)\\-]{6,}";
 
 // One page from bag to order: the items, then how to get them, then who and where.
 // Only a full name and phone number are asked for, plus an address for delivery.
 function Bag() {
+  usePageTitle("Your bag", { noindex: true });
   const items = useBag();
   const [optionCode, setOptionCode] = useState("");
   const { quote, failed, loading } = useQuote(items, optionCode);
@@ -877,6 +1045,9 @@ function Bag() {
   const [problem, setProblem] = useState("");
   const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const [redirecting, setRedirecting] = useState(false);
+  const [website, setWebsite] = useState("");
+  const [challenge, setChallenge] = useState("");
+  const [challengeRun, setChallengeRun] = useState(0);
   const lineFor = (variantId: string) => quote?.items.find((line) => line.variantId === variantId);
   const errorFor = (variantId: string) => quote?.errors.find((error) => error.variantId === variantId);
 
@@ -891,7 +1062,7 @@ function Bag() {
   const selected = options.find((option) => option.code === optionCode);
   const needsAddress = selected?.method !== "pickup";
   const blocked = !quote || quote.errors.length > 0 || !quote.items.some((line) => line.available);
-  const canOrder = !!quote?.checkoutAvailable && !blocked && !submitting;
+  const canOrder = !!quote?.checkoutAvailable && !blocked && !submitting && (!TURNSTILE_KEY || !!challenge);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -903,6 +1074,8 @@ function Bag() {
         items: items.map(({ variantId, quantity }) => ({ variantId, quantity })),
         deliveryOptionCode: optionCode || undefined,
         customer: { name, phone, address: needsAddress ? address : undefined },
+        website,
+        turnstileToken: challenge || undefined,
       });
       rememberOrder(result.order.number);
       clearBag();
@@ -915,6 +1088,9 @@ function Bag() {
       setPlaced(result);
       window.scrollTo({ top: 0 });
     } catch (cause) {
+      // A security-check token works once; ask for a fresh one after any failure.
+      setChallenge("");
+      setChallengeRun((run) => run + 1);
       setProblem(
         cause instanceof OrderError
           ? cause.code === "quote_changed"
@@ -931,7 +1107,7 @@ function Bag() {
     return (
       <>
         <Header />
-        <main className="page-shell">
+        <main id="main" className="page-shell">
           <p className="status-panel" role="status">
             Taking you to secure payment…
           </p>
@@ -946,7 +1122,7 @@ function Bag() {
     return (
       <>
         <Header />
-        <main className="page-shell">
+        <main id="main" className="page-shell">
           <div className="page-hero">
             <p className="eyebrow">Order received</p>
             <h1>Thank you.</h1>
@@ -983,6 +1159,7 @@ function Bag() {
             <a href={`/track?number=${encodeURIComponent(order.number)}`} className="button button--orange">
               {payment.status === "failed" ? "Pay now →" : "Track this order →"}
             </a>
+            <HelpLine orderNumber={order.number} />
           </div>
         </main>
         <Footer />
@@ -993,7 +1170,7 @@ function Bag() {
   return (
     <>
       <Header />
-      <main className="page-shell">
+      <main id="main" className="page-shell">
         <div className="page-hero">
           <p className="eyebrow">Your selection</p>
           <h1>Your bag.</h1>
@@ -1128,6 +1305,17 @@ function Bag() {
                     />
                   </label>
                 ) : null}
+                <input
+                  className="hp-field"
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  aria-hidden="true"
+                  value={website}
+                  onChange={(event) => setWebsite(event.target.value)}
+                />
+                <TurnstileBox key={challengeRun} onToken={setChallenge} />
                 <div className="totals">
                   <p>
                     <span>Subtotal</span>
@@ -1212,6 +1400,7 @@ function stepLabel(step: (typeof TRACK_STEPS)[number], pickup: boolean) {
 // Anyone with the order number (from the confirmation screenshot) can see where an
 // order is. It shows no name, phone or address.
 function Track() {
+  usePageTitle("Track your order", { noindex: true });
   const initial = new URLSearchParams(window.location.search).get("number") ?? "";
   const [value, setValue] = useState(initial);
   const [order, setOrder] = useState<TrackedOrder | null>(null);
@@ -1274,7 +1463,7 @@ function Track() {
   return (
     <>
       <Header />
-      <main className="page-shell">
+      <main id="main" className="page-shell">
         <div className="page-hero">
           <p className="eyebrow">Order status</p>
           <h1>Track your order.</h1>
@@ -1334,6 +1523,11 @@ function Track() {
             <p className="eyebrow">Order {order.number}</p>
             <h2>{order.stage.label}</h2>
             <p>{order.stage.detail}</p>
+            {order.note ? (
+              <p className="track-note">
+                <strong>A note from Esspor:</strong> {order.note}
+              </p>
+            ) : null}
             {order.canPay ? (
               <button type="button" className="button button--orange" onClick={pay} disabled={paying}>
                 {paying ? "Opening payment…" : "Pay now →"}
@@ -1376,6 +1570,7 @@ function Track() {
             <button type="button" className="text-link" onClick={() => lookup(order.number)}>
               Refresh status
             </button>
+            <HelpLine orderNumber={order.number} />
           </section>
         ) : null}
       </main>
@@ -1384,11 +1579,196 @@ function Track() {
   );
 }
 
-function HowItWorks() {
+// ---------- Information pages ----------
+// Each page ships with plain-language default text. The owner can replace any of them by
+// publishing a content entry with the same slug (privacy, terms, delivery-returns) in
+// the admin, with no deploy needed.
+
+function InfoPage({ slug, eyebrow, title, children }: { slug: string; eyebrow: string; title: string; children: ReactNode }) {
+  usePageTitle(title);
+  const [custom, setCustom] = useState<ContentEntry | null>(null);
+  useEffect(() => {
+    let active = true;
+    // One cached list of every custom page, so a page with no custom text isn't a 404 in the console.
+    listContent("page")
+      .then((list) => active && setCustom(list.items.find((entry) => entry.slug === slug) ?? null))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [slug]);
   return (
     <>
       <Header />
-      <main className="page-shell story-page">
+      <main id="main" className="page-shell">
+        <div className="page-hero">
+          <p className="eyebrow">{custom?.eyebrow || eyebrow}</p>
+          <h1>{custom?.title || title}</h1>
+        </div>
+        <div className="info-page">{custom ? <PlainText text={custom.body} /> : children}</div>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+const UPDATED = "Last updated: November 2026.";
+
+function Privacy() {
+  const site = useSite();
+  return (
+    <InfoPage slug="privacy" eyebrow="Your information" title="Privacy.">
+      <p>
+        {site.businessName} collects only what it needs to get your order to you. This is a plain-language summary of what that means.
+      </p>
+      <h2>What we collect</h2>
+      <ul>
+        <li>Your full name and phone number when you place an order.</li>
+        <li>Your delivery address, only if you choose delivery.</li>
+        <li>What you ordered, the amount, and whether it has been paid.</li>
+      </ul>
+      <h2>Why</h2>
+      <p>To prepare and deliver or hand over your order, to let you check its status, and to keep records of our sales.</p>
+      <h2>Payments</h2>
+      <p>
+        Online payments are handled by Paystack. Your card or mobile money details go to Paystack, not to us. We only learn whether the payment
+        succeeded. Paystack's own privacy notice applies to that part.
+      </p>
+      <h2>Messages and tracking</h2>
+      <p>
+        We don't send marketing, and we don't send SMS, email or WhatsApp updates about orders. You check an order's status on Track order using your
+        order number, so keep a screenshot of it. We may use your phone number to contact you about your order only.
+      </p>
+      <h2>On your device</h2>
+      <p>
+        Your bag and the numbers of your last few orders are stored in your own browser so you can find them again. We don't use advertising or
+        analytics cookies. If a security check appears at checkout, it is provided by Cloudflare to keep automated spam out.
+      </p>
+      <h2>Sharing and keeping</h2>
+      <p>
+        We share your name, phone number and address only with whoever delivers your order, and only as needed. We don't sell personal data. We keep
+        order records as long as we need them for accounting, returns and disputes.
+      </p>
+      <h2>Your choices</h2>
+      <p>
+        You can ask to see, correct or delete your details through the <a href="/contact">contact page</a>, apart from records we are required to keep.
+      </p>
+      <p className="updated">{UPDATED}</p>
+    </InfoPage>
+  );
+}
+
+function Terms() {
+  const site = useSite();
+  return (
+    <InfoPage slug="terms" eyebrow="The small print" title="Terms of sale.">
+      <h2>What you are buying</h2>
+      <p>
+        {site.businessName} sells decants: small portions of authentic fragrances, prepared from the original bottle and sold in a labelled Esspor
+        bottle. Photos of an original full-size bottle are for reference. You receive a decant in the size you choose.
+      </p>
+      <h2>Prices and orders</h2>
+      <p>
+        Prices are in Ghana cedis (GH₵) and are confirmed by our system when you check out. An order is placed when you submit it. If an item sells out
+        or a price was shown in error, we may cancel the order and refund anything you paid.
+      </p>
+      <h2>Payment</h2>
+      <p>
+        You pay online through Paystack. An unpaid online order is released after a short time so the stock goes back on sale. If a payment reaches us
+        after that, we will refund it.
+      </p>
+      <h2>Delivery, pickup and returns</h2>
+      <p>
+        See <a href="/delivery-returns">Delivery &amp; returns</a>. Your order number is the key to checking your order, so keep a screenshot of it.
+      </p>
+      <h2>Fragrance care</h2>
+      <p>
+        Fragrances are cosmetic products. Check the notes for anything you react to, and test a small amount on your skin first. Keep decants away
+        from heat, sunlight and children.
+      </p>
+      <h2>Changes</h2>
+      <p>We may update these terms. The version on this page when you order is the one that applies to that order.</p>
+      <p className="updated">{UPDATED}</p>
+    </InfoPage>
+  );
+}
+
+function DeliveryReturns() {
+  const site = useSite();
+  return (
+    <InfoPage slug="delivery-returns" eyebrow="Getting your order" title="Delivery & returns.">
+      <h2>Delivery</h2>
+      <p>
+        {site.announcement.trim() || "Order before 8PM for next-day delivery, Monday to Friday."} Delivery areas and fees are shown at checkout before
+        you pay.
+      </p>
+      <h2>Pickup</h2>
+      <p>{site.pickupNote.trim() || "If pickup is available, its details are shown at checkout."} Pickup is free.</p>
+      <h2>Tracking your order</h2>
+      <p>
+        We don't send updates by SMS, email or WhatsApp. After you order, take a screenshot of your order number, then use{" "}
+        <a href="/track">Track order</a> any time to see where it is.
+      </p>
+      <h2>Returns</h2>
+      <p>
+        Decants are filled to order from the original bottle, so we can't take back opened or used decants. If your order arrives wrong, damaged or
+        incomplete, contact us as soon as you can with your order number and a photo, and we will put it right.
+      </p>
+      <p className="updated">{UPDATED}</p>
+    </InfoPage>
+  );
+}
+
+function Contact() {
+  const site = useSite();
+  const wa = whatsappLink(site, "Hello Esspor, I have a question.");
+  usePageTitle("Contact");
+  const channels = [
+    wa ? { label: "WhatsApp", href: wa, text: "Message us" } : null,
+    site.phone ? { label: "Phone", href: `tel:${site.phone.replace(/[^0-9+]/g, "")}`, text: site.phone } : null,
+    site.email ? { label: "Email", href: `mailto:${site.email}`, text: site.email } : null,
+    site.instagram ? { label: "Instagram", href: `https://instagram.com/${site.instagram}`, text: `@${site.instagram}` } : null,
+  ].filter((entry): entry is { label: string; href: string; text: string } => entry !== null);
+  return (
+    <>
+      <Header />
+      <main id="main" className="page-shell">
+        <div className="page-hero">
+          <p className="eyebrow">Get in touch</p>
+          <h1>Contact.</h1>
+          <p>Questions about a fragrance or an order? Quote your order number if you have one.</p>
+        </div>
+        <div className="info-page">
+          {channels.length ? (
+            <ul>
+              {channels.map((channel) => (
+                <li key={channel.label}>
+                  <strong>{channel.label}:</strong> <a href={channel.href}>{channel.text}</a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Our contact details are being set up. Please check back soon.</p>
+          )}
+          {site.pickupNote.trim() ? (
+            <>
+              <h2>Pickup</h2>
+              <p>{site.pickupNote}</p>
+            </>
+          ) : null}
+        </div>
+      </main>
+      <Footer />
+    </>
+  );
+}
+
+function HowItWorks() {
+  usePageTitle("How it works");
+  return (
+    <>
+      <Header />
+      <main id="main" className="page-shell story-page">
         <div className="page-hero">
           <p className="eyebrow">The Esspor way</p>
           <h1>
@@ -1431,10 +1811,11 @@ function HowItWorks() {
 }
 
 function About() {
+  usePageTitle("Our story");
   return (
     <>
       <Header />
-      <main className="page-shell story-page">
+      <main id="main" className="page-shell story-page">
         <div className="page-hero">
           <p className="eyebrow">Our story</p>
           <h1>Essence, portioned.</h1>
@@ -1518,15 +1899,25 @@ function App() {
   if (path === "/shop") return <Shop />;
   if (path === "/bag") return <Bag />;
   if (path === "/track") return <Track />;
+  if (path === "/privacy") return <Privacy />;
+  if (path === "/terms") return <Terms />;
+  if (path === "/delivery-returns") return <DeliveryReturns />;
+  if (path === "/contact") return <Contact />;
   if (path === "/how-it-works") return <HowItWorks />;
   if (path === "/about") return <About />;
-  if (path === "/preview/product") return <ProductPage preview />;
+  // The layout preview is a development aid; the live site doesn't serve it.
+  if (import.meta.env.DEV && path === "/preview/product") return <ProductPage preview />;
   if (path.startsWith("/product/"))
     return <ProductPage slug={path.slice("/product/".length)} />;
+  return <NotFound />;
+}
+
+function NotFound() {
+  usePageTitle("Page not found", { noindex: true });
   return (
     <>
       <Header />
-      <main className="page-shell">
+      <main id="main" className="page-shell">
         <div className="status-panel">
           <h1>Page not found</h1>
           <a className="text-link" href="/">

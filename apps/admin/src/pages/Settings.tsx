@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
-import { api, formatDate, formatMoney, humanize, toCedis, toMinor, type DeliveryOption, type TeamMember, type User } from "../api.ts";
+import { useEffect, useState, type FormEvent } from "react";
+import { api, formatDate, formatMoney, humanize, toCedis, toMinor, type DeliveryOption, type SiteSettings, type TeamMember, type User } from "../api.ts";
 import { authErrorText, changePassword } from "../auth.ts";
-import { Badge, Button, Card, Checkbox, Field, Input, Loading, Notice, PageHeader, Select, useLoad, useToast } from "../components/ui.tsx";
+import { Badge, Button, Card, Checkbox, Field, Input, Loading, Notice, PageHeader, Select, Textarea, useLoad, useToast } from "../components/ui.tsx";
 
 const MIN_PASSWORD = 12;
 
@@ -11,10 +11,69 @@ export function Settings({ user }: { user: User }) {
     <>
       <PageHeader title="Settings" subtitle="Your account, team, delivery options and activity." />
       <Account />
+      {owner ? <StoreDetails /> : null}
       {owner ? <Team me={user} /> : null}
       <Delivery owner={owner} />
       {owner ? <Audit /> : null}
     </>
+  );
+}
+
+function StoreDetails() {
+  const { data, error } = useLoad(() => api<SiteSettings>("GET", "/site"), []);
+  const [form, setForm] = useState<SiteSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  useEffect(() => {
+    if (data) setForm(data);
+  }, [data]);
+  if (!form) return <Loading error={error} />;
+  const set = (key: keyof SiteSettings) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      setForm(await api<SiteSettings>("PUT", "/site", form));
+      toast.ok("Store details saved. Visitors see them within a few minutes.");
+    } catch (err) {
+      toast.error(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="Store details" actions={<span className="muted small">Shown to customers on every page</span>}>
+      <form className="grid-2" onSubmit={save}>
+        <Field label="Business name">
+          <Input value={form.businessName} onChange={set("businessName")} required maxLength={80} />
+        </Field>
+        <Field label="Top banner" hint="The strip above the menu. Leave empty to hide it. Keep it true: it is a promise to customers.">
+          <Input value={form.announcement} onChange={set("announcement")} maxLength={160} />
+        </Field>
+        <Field label="WhatsApp number" hint="Used for the “Message us” links. Local numbers like 024 555 0199 are fine.">
+          <Input inputMode="tel" value={form.whatsapp} onChange={set("whatsapp")} />
+        </Field>
+        <Field label="Phone number" hint="Shown in the footer and on the contact page.">
+          <Input inputMode="tel" value={form.phone} onChange={set("phone")} />
+        </Field>
+        <Field label="Email">
+          <Input type="email" value={form.email} onChange={set("email")} />
+        </Field>
+        <Field label="Instagram" hint="A handle or a link.">
+          <Input value={form.instagram} onChange={set("instagram")} />
+        </Field>
+        <Field label="Pickup address and hours" hint="Shown on Delivery & returns and Contact." wide>
+          <Textarea rows={3} value={form.pickupNote} onChange={set("pickupNote")} maxLength={400} />
+        </Field>
+        <div className="form-actions grid-span">
+          <Button type="submit" tone="primary" busy={busy}>
+            Save details
+          </Button>
+        </div>
+      </form>
+    </Card>
   );
 }
 

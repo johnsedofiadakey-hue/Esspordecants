@@ -1,4 +1,4 @@
-import { api, type Summary } from "../api.ts";
+import { api, formatMoney, type Summary } from "../api.ts";
 import { Badge, Card, Link, Loading, Notice, PageHeader, useLoad } from "../components/ui.tsx";
 
 export function Dashboard() {
@@ -31,6 +31,22 @@ export function Dashboard() {
           <strong>{data.orders.total}</strong>
         </Link>
       </div>
+      {data.sales ? (
+        <div className="stats">
+          <div className="stat">
+            <span>Sales, last 30 days</span>
+            <strong>{formatMoney(data.sales.last30Days.revenueMinor)}</strong>
+          </div>
+          <div className="stat">
+            <span>Paid orders, last 30 days</span>
+            <strong>{data.sales.last30Days.orders}</strong>
+          </div>
+          <div className="stat">
+            <span>Paid orders today</span>
+            <strong>{data.sales.today.orders}</strong>
+          </div>
+        </div>
+      ) : null}
       <Card title="Low and out of stock (published)">
         {data.lowStock.length === 0 ? (
           <p className="muted">Nothing running low.</p>

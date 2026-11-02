@@ -2,9 +2,10 @@
 // publishes one synthetic product plus home content through the real API.
 // Run with: node --env-file=.env.emulators test/fixtures-local.ts
 import assert from "node:assert/strict";
+import { saveSiteSettings } from "../src/services/site.ts";
 import { completeProduct, imageForm, login, mediaForm, mp4, setup } from "./helpers.ts";
 
-const { app } = await setup({ publicBaseUrl: "http://localhost:4000" });
+const { app, store } = await setup({ publicBaseUrl: "http://localhost:4000" });
 const { admin } = await login(app);
 
 const product = await admin("POST", "/products", { body: { house: "Maison Verité", name: "Cèdre Lumière" } });
@@ -35,6 +36,16 @@ assert.equal(published.status, 200, JSON.stringify(published.data));
 // One pickup point and one courier, both active, so checkout shows the two choices.
 await admin("POST", "/delivery-options", { body: { code: "local-pickup", label: "Esspor pickup point", description: "Collect in person. We'll call to arrange a time.", priceMinor: 0, method: "pickup", active: true, sortOrder: 0 } });
 await admin("POST", "/delivery-options", { body: { code: "local-courier", label: "Courier delivery", description: "Next-day delivery, Mon–Fri.", priceMinor: 2500, method: "delivery", active: true, sortOrder: 1 } });
+
+await saveSiteSettings(store, {
+  businessName: "Esspor Decants",
+  announcement: "Order before 8PM for next-day delivery | Mon–Fri",
+  whatsapp: "024 555 0199",
+  phone: "+233 24 555 0199",
+  email: "hello@esspor.example",
+  instagram: "esspor.gh",
+  pickupNote: "Osu, Accra. Weekdays 10 to 6.",
+});
 
 for (const entry of [
   { slug: "local-hero", placement: "home-hero", eyebrow: "Local check", title: "Published hero copy.", body: "First paragraph from the CMS.\n\nSecond paragraph.", ctaLabel: "See the scents", ctaHref: "/shop" },

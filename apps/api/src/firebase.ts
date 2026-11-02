@@ -36,4 +36,5 @@ export const COLLECTIONS = {
   stock: "stockMovements",
   audit: "audit",
   counters: "counters",
+  settings: "settings",
 } as const;

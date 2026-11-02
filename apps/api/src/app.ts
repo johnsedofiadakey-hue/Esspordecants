@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { requireAdmin } from "./auth/middleware.ts";
 import type { Config } from "./config.ts";
-import type { AppEnv, Deps } from "./context.ts";
+import type { AppEnv, Deps, Shell } from "./context.ts";
 import type { Store } from "./firebase.ts";
 import { ApiError } from "./lib/errors.ts";
 import { contentRoutes } from "./routes/admin/content.ts";
@@ -13,12 +13,31 @@ import { productRoutes } from "./routes/admin/products.ts";
 import { settingsRoutes } from "./routes/admin/settings.ts";
 import { userRoutes } from "./routes/admin/users.ts";
 import { publicRoutes } from "./routes/public.ts";
+import { seoRoutes } from "./routes/seo.ts";
 import { paymentAdapterFor, type PaymentAdapter } from "./services/payments.ts";
 
 const localOrigin = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d{2,5}$/;
 
-export function createApp(input: { store: Store; config: Config; payments?: PaymentAdapter }) {
-  const deps: Deps = { store: input.store, config: input.config, payments: input.payments ?? paymentAdapterFor(input.config) };
+export function createApp(input: { store: Store; config: Config; payments?: PaymentAdapter; fetchShell?: () => Promise<Shell> }) {
+  const deps: Deps = {
+    store: input.store,
+    config: input.config,
+    payments: input.payments ?? paymentAdapterFor(input.config),
+    fetchShell:
+      input.fetchShell ??
+      (async () => {
+        const response = await fetch(`${input.config.siteUrl}/index.html`, { signal: AbortSignal.timeout(5000) });
+        if (!response.ok) throw new Error(`index.html returned ${response.status}`);
+        // The shell's own security headers (set by Hosting) are passed on, so pages built
+        // from it are protected exactly like the static ones.
+        const headers: Record<string, string> = {};
+        for (const name of ["content-security-policy", "permissions-policy", "x-content-type-options", "referrer-policy", "strict-transport-security"]) {
+          const value = response.headers.get(name);
+          if (value) headers[name] = value;
+        }
+        return { html: await response.text(), headers };
+      }),
+  };
   const { config } = deps;
   const app = new Hono<AppEnv>();
 
@@ -52,13 +71,22 @@ export function createApp(input: { store: Store; config: Config; payments?: Paym
       throw new ApiError(413, "file_too_large", `That file is too large. Photos must be under ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB and videos under ${Math.round(config.maxVideoBytes / 1024 / 1024)} MB.`);
     },
   });
+  // A 300-row spreadsheet of product copy is far larger than any other JSON body.
+  const importLimit = bodyLimit({
+    maxSize: 3 * 1024 * 1024,
+    onError: () => {
+      throw new ApiError(413, "payload_too_large", "That file is too large to import in one go. Split it into smaller files.");
+    },
+  });
   app.use("/api/v1/*", jsonLimit);
   app.use("/api/admin/*", async (c, next) => {
     const isUpload = c.req.method === "POST" && /\/images$/.test(c.req.path);
+    if (c.req.method === "POST" && c.req.path === "/api/admin/products/import") return importLimit(c, next);
     return isUpload ? uploadLimit(c, next) : jsonLimit(c, next);
   });
 
   app.route("/", publicRoutes(deps));
+  app.route("/", seoRoutes(deps));
 
   const admin = new Hono<AppEnv>();
   admin.use("*", requireAdmin(deps));

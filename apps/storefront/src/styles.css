@@ -25,6 +25,9 @@
   -webkit-font-smoothing: antialiased;
   --cream: #fff5e8;
   --orange: #d26411;
+  /* A deeper orange for small text: 5.3:1 on cream, where --orange is only 3.5:1. */
+  --orange-text: #a84b09;
+  --announce-h: 38px;
   --peach: #fdca97;
   --coffee: #47291c;
   --line: #dcc3ad;
@@ -112,7 +115,7 @@ select:focus-visible {
 .main-nav a:hover,
 .header-actions a:hover,
 .site-footer a:hover {
-  color: var(--orange);
+  color: var(--orange-text);
 }
 .site-header--dark .main-nav a:hover,
 .site-header--dark .header-actions a:hover {
@@ -137,7 +140,6 @@ select:focus-visible {
   background: currentColor;
 }
 .announce-bar {
-  --announce-h: 38px;
   height: var(--announce-h);
   display: flex;
   align-items: center;
@@ -165,7 +167,7 @@ select:focus-visible {
   position: absolute;
   left: 0;
   right: 0;
-  top: 38px;
+  top: var(--announce-h);
 }
 .hero {
   height: min(780px, 66vw);
@@ -207,7 +209,7 @@ select:focus-visible {
 }
 .eyebrow {
   margin: 0 0 20px;
-  color: var(--orange);
+  color: var(--orange-text);
   font-size: 18px;
   font-weight: 700;
   text-transform: uppercase;
@@ -363,7 +365,7 @@ p {
   display: inline-flex;
   align-items: center;
   gap: 22px;
-  color: var(--orange);
+  color: var(--orange-text);
   font-weight: 700;
   text-transform: uppercase;
   font-size: 18px;
@@ -624,7 +626,7 @@ p {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  color: var(--orange);
+  color: var(--orange-text);
   font-size: 15px;
   font-weight: 700;
   text-transform: uppercase;
@@ -675,7 +677,7 @@ p {
   text-transform: uppercase;
   font-size: 15px;
   font-weight: 700;
-  color: var(--orange);
+  color: var(--orange-text);
   margin: 27px 0 30px;
 }
 .breadcrumbs a:hover {
@@ -885,7 +887,7 @@ p {
 .notes-grid h3 {
   font-size: 22px;
   text-transform: uppercase;
-  color: var(--orange);
+  color: var(--orange-text);
 }
 .notes-grid p {
   font-size: 20px;
@@ -1094,7 +1096,7 @@ p {
   min-height: 250px;
 }
 .story-steps span {
-  color: var(--orange);
+  color: var(--orange-text);
   font-size: 22px;
   font-weight: 700;
 }
@@ -1131,7 +1133,7 @@ p {
   }
 }
 @media (max-width: 760px) {
-  .announce-bar {
+  :root {
     --announce-h: 34px;
   }
   .announce-bar p {
@@ -1139,9 +1141,6 @@ p {
     letter-spacing: 0.04em;
     white-space: normal;
     line-height: 1.25;
-  }
-  .hero-wrap > .site-header {
-    top: 34px;
   }
   .site-header {
     height: 86px;
@@ -1690,4 +1689,78 @@ button.text-link {
   .track-steps {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.skip-link {
+  position: absolute;
+  left: 12px;
+  top: -60px;
+  z-index: 20;
+  background: var(--coffee);
+  color: var(--cream);
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+.skip-link:focus {
+  top: 8px;
+}
+.footer-contact,
+.footer-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+.footer-legal {
+  font-size: 15px;
+}
+.help-line {
+  margin: 0;
+  font-size: 18px;
+}
+.info-page {
+  max-width: 760px;
+  display: grid;
+  gap: 8px;
+}
+.info-page h2 {
+  font-size: 28px;
+  margin: 26px 0 4px;
+}
+.info-page p,
+.info-page li {
+  font-size: 19px;
+  line-height: 1.5;
+}
+.info-page ul {
+  padding-left: 22px;
+  margin: 0;
+}
+.info-page .updated {
+  font-size: 16px;
+  opacity: 0.8;
+  margin-top: 28px;
+}
+.hp-field {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.track-note {
+  background: #fffaf3;
+  border-left: 4px solid var(--orange);
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.turnstile-box {
+  min-height: 65px;
+}
+
+.site-footer small {
+  display: grid;
+  gap: 8px;
+  align-content: start;
 }

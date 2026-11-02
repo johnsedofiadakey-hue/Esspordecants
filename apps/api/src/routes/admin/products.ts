@@ -36,6 +36,7 @@ import {
   type VariantRec,
 } from "../../services/products.ts";
 import { invalidateCatalog } from "../../services/catalog.ts";
+import { importProducts, MAX_IMPORT_ROWS } from "../../services/importer.ts";
 import { refreshContentForImage } from "./content.ts";
 
 const productFields = z.object({
@@ -162,6 +163,15 @@ export function productRoutes(deps: Deps) {
       .filter((product) => !q || fold(`${product.house} ${product.name} ${product.slug}`).includes(q))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     return c.json({ items: items.map(adminProductSummary) });
+  });
+
+  // Bulk create draft products from spreadsheet rows. Send dryRun: true to check first.
+  app.post("/products/import", async (c) => {
+    const input = await readJson(c, z.object({ rows: z.array(z.record(z.string(), z.unknown())).min(1, "The file has no rows.").max(MAX_IMPORT_ROWS, `Import up to ${MAX_IMPORT_ROWS} rows at a time.`), dryRun: z.boolean().default(true) }));
+    const user = c.get("user");
+    const report = await importProducts(store, input.rows, { dryRun: input.dryRun, actorId: user.id });
+    if (!input.dryRun) await audit(store, user.id, "import", "product", null, { created: report.created.length, skipped: report.skipped.length });
+    return c.json(report);
   });
 
   app.post("/products", async (c) => {

@@ -265,3 +265,36 @@ Served bytes (egress), function time and Firestore reads are what grow with traf
 - A customer who loses their order number cannot find the order (by design; the merchant can search by phone in the admin).
 - Orders stay `Pending payment` for 45 minutes if the customer abandons the Paystack page; stock is held until then.
 - Rate limiting is per function instance, so it is a speed bump, not a full bot defence (see the audit).
+
+## 12. Launch features, tests and operations (2026-11-02)
+
+Everything in `docs/AUDIT_2026-11-02.md` that did not depend on a business decision or on access to the live project is now built. The runbook for the rest is `docs/OPERATIONS.md`.
+
+**Customers**
+- Store details (WhatsApp, phone, email, Instagram, pickup note, top banner) editable in the admin; footer, contact page and "Message us on WhatsApp" help links on the confirmation and tracking pages use them. The banner hides if left empty.
+- Privacy, Terms, Delivery & returns and Contact pages. **The default wording is a plain-language draft, not legal advice**; the owner or a lawyer must read it before launch, and any of the three can be replaced from the admin Content screen.
+- A merchant "Note for the customer" appears on Track order (the replacement for messages).
+- Per-page titles, a favicon, default social tags, a skip-to-content link, noindex on bag, track and not-found pages, and a deeper orange for small text (contrast 5.3:1, was 3.5:1).
+- Shared product links show the product's own title, picture and price (see the contract); `/sitemap.xml` and `/robots.txt` are generated.
+
+**Abuse protection**: hidden honeypot field, per-phone cap of three unpaid orders, per-minute rate limits, and an optional Cloudflare Turnstile check (needs a site key at build and a secret; off by default).
+
+**Admin**: Store details card; bulk product import from a spreadsheet (check first, drafts only, never overwrites); order export to a spreadsheet with formula defusing; packing-slip print; "Message on WhatsApp" link on orders; 30-day sales on the overview; a chime, pop-up and count for new orders while an admin tab is open.
+
+**Security headers**: the storefront now enforces a Content-Security-Policy and Permissions-Policy (verified against a real build in a real browser: no violations). The admin's policy is report-only until it has been checked signed in on the live site (OPERATIONS.md, section F).
+
+**Found by the new browser test and fixed**: the phone field's validation pattern was invalid in current Chrome (so it silently did not validate); the thumbnail row widened the page on phones; legal pages were making needless 404 requests.
+
+**Verification**
+- API: `npm test` **40 of 40**, plus new coverage for store details, customer notes, bot guards, order export, the importer, link previews and the sitemap.
+- **New: `npm run e2e`** (`apps/api/e2e/browser.test.ts`, 7 tests, also run in the deploy pipeline): a production build of the storefront served like Hosting with the real headers, the real API on the emulators, a stand-in for Paystack, and headless Chrome. It covers the banner, product link previews, no video download until play, a full pickup order through payment and back to Track order, typing an order number by hand, an unknown number, all information pages, a 404, no sideways scrolling on a phone across seven pages, and the sitemap. It fails on any console error, including security-policy violations.
+- Spreadsheet reader checked on the template and an Excel-style file (BOM, semicolons, quoted line breaks).
+- Typechecks and builds for all three apps.
+- Looked at by eye in the preview browser: contact page, footer, admin Store details, admin import page, admin order screens.
+
+**Not done, and why**
+- Nothing here touches the live project. Secrets, backups, the budget alert, uptime checks, the custom domain and the Paystack test-mode run are in OPERATIONS.md for a person with access.
+- The admin screens have no automated tests, and a file upload through the import page was not exercised in a browser (the parser and the API are each tested).
+- Discount codes, a customers list and sales reports beyond the 30-day figures were not asked for and are not built.
+- Videos still have no captions.
+- Real photography replaces the generated concept images on the home page; until then their "concept" captions stay.

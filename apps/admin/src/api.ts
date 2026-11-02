@@ -113,6 +113,7 @@ export type Order = OrderSummary & {
   subtotalMinor: number;
   deliveryMinor: number;
   internalNotes: string;
+  publicNote?: string;
   allowedTransitions: string[];
   items: { id: string; sku: string; house: string; name: string; sizeMl: number; unitPriceMinor: number; quantity: number; lineTotalMinor: number }[];
   events: { id: string; type: string; from: string | null; to: string | null; note: string; actorName: string | null; createdAt: string }[];
@@ -145,10 +146,47 @@ export type DeliveryOption = {
   sortOrder: number;
 };
 
+export type SiteSettings = {
+  businessName: string;
+  announcement: string;
+  whatsapp: string;
+  phone: string;
+  email: string;
+  instagram: string;
+  pickupNote: string;
+};
+
+export type ImportReport = {
+  dryRun: boolean;
+  created: { house: string; name: string; slug: string; sizes: number }[];
+  skipped: { house: string; name: string; reason: string }[];
+  errors: { row: number; message: string }[];
+};
+
+// Ghana numbers are typed locally (024 555 0199); links need the international form.
+export const whatsappDigits = (phone: string) => {
+  const digits = phone.replace(/\D/g, "");
+  return digits.startsWith("00") ? digits.slice(2) : digits.startsWith("0") ? `233${digits.slice(1)}` : digits;
+};
+
+// Downloads a file the API builds, sending the sign-in token a plain link cannot.
+export async function download(path: string, fallbackName: string) {
+  const response = await fetch(`/api/admin${path}`, { headers: await authHeaders() });
+  if (!response.ok) throw new Error(`Download failed (${response.status}).`);
+  const name = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
 export type Summary = {
   products: { draft: number; published: number; archived: number };
   orders: { open: number; total: number };
   lowStock: { variantId: string; productId: string; label: string; sku: string; stockQuantity: number; stockStatus: string }[];
+  sales?: { last30Days: { orders: number; revenueMinor: number }; today: { orders: number } };
   checkoutEnabled: boolean;
   deliveryOptionsActive: number;
   paymentProvider: string;

@@ -18,9 +18,12 @@ export function ProductList() {
         title="Products"
         subtitle="Fragrances sold as Esspor decants. Products stay private until every publish check passes."
         actions={
-          <Button tone="primary" onClick={() => setCreating(true)}>
-            New product
-          </Button>
+          <>
+            <Button onClick={() => navigate("/products/import")}>Import from spreadsheet</Button>
+            <Button tone="primary" onClick={() => setCreating(true)}>
+              New product
+            </Button>
+          </>
         }
       />
       {creating ? <NewProduct onCancel={() => setCreating(false)} /> : null}

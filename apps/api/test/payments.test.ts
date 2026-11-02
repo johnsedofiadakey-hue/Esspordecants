@@ -51,8 +51,12 @@ describe("Paystack payments and order tracking", () => {
   let variantId = "";
   const customer = { name: "Ama Mensah", phone: "+233 24 123 4567", address: "12 Cantonments Rd, Osu, Accra" };
 
+  let buyer = 0;
   const order = async (quantity = 1) => {
-    const res = await call(app, "POST", "/api/v1/orders", { body: { items: [{ variantId, quantity }], deliveryOptionCode: "courier", customer } });
+    // A different phone each time: one number may only hold a few unpaid orders at once.
+    const res = await call(app, "POST", "/api/v1/orders", {
+      body: { items: [{ variantId, quantity }], deliveryOptionCode: "courier", customer: { ...customer, phone: `+233 24 000 ${String(1000 + ++buyer)}` } },
+    });
     assert.equal(res.status, 201, JSON.stringify(res.data));
     return res.data as { order: { number: string; totalMinor: number }; payment: { status: string; authorizationUrl: string | null; reference: string | null } };
   };
@@ -81,7 +85,7 @@ describe("Paystack payments and order tracking", () => {
     assert.equal(sent.headers.authorization, `Bearer ${KEY}`);
     assert.equal(sent.body.amount, 26500, "pesewas, straight from the server-side total");
     assert.equal(sent.body.currency, "GHS");
-    assert.equal(sent.body.email, "233241234567@customers.esspordecants.web.app", "placeholder email comes from the phone number");
+    assert.equal(sent.body.email, "233240001001@customers.esspordecants.web.app", "placeholder email comes from the phone number");
     assert.equal(sent.body.callback_url, `https://shop.test/track?number=${encodeURIComponent(placed.order.number)}`);
     const stock = await admin("GET", `/products/${productId}`);
     assert.equal(stock.data.variants[0].stockQuantity, 8, "stock is held while payment is pending");
@@ -95,7 +99,7 @@ describe("Paystack payments and order tracking", () => {
     assert.equal(res.data.stage.label, "Waiting for payment");
     assert.equal(res.data.canPay, true);
     const text = JSON.stringify(res.data);
-    for (const secret of [customer.name, "24 123 4567", "Cantonments", "internalNotes", "actorName"]) assert.ok(!text.includes(secret), `leaked ${secret}`);
+    for (const secret of [customer.name, "24 000 100", "Cantonments", "internalNotes", "actorName"]) assert.ok(!text.includes(secret), `leaked ${secret}`);
     assert.equal((await track("ESS-1000-AAAA")).status, 404);
     assert.equal((await track("nonsense")).status, 404);
   });

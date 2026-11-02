@@ -89,6 +89,20 @@ export function getProduct(slug: string): Promise<Product> {
   return getJson<Product>(`/api/v1/products/${encodeURIComponent(slug)}`);
 }
 
+export type SiteSettings = {
+  businessName: string;
+  announcement: string;
+  whatsapp: string;
+  phone: string;
+  email: string;
+  instagram: string;
+  pickupNote: string;
+};
+
+export function getSite(): Promise<SiteSettings> {
+  return getJson<SiteSettings>("/api/v1/site");
+}
+
 export type Family = { name: string; count: number };
 
 export function listFamilies(): Promise<{ items: Family[] }> {
@@ -204,6 +218,9 @@ export async function placeOrder(input: {
   items: { variantId: string; quantity: number }[];
   deliveryOptionCode?: string | undefined;
   customer: { name: string; phone: string; address?: string | undefined };
+  // Left empty by people; filled in by bots.
+  website?: string | undefined;
+  turnstileToken?: string | undefined;
 }): Promise<PlacedOrder> {
   let response: Response;
   try {
@@ -237,6 +254,8 @@ export type TrackedOrder = {
   currency: "GHS";
   paymentStatus: string;
   canPay: boolean;
+  // Optional message from Esspor, such as rider details or a pickup time.
+  note: string;
   createdAt: string;
   updatedAt: string;
   timeline: { label: string; at: string }[];

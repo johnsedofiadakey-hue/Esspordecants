@@ -18,6 +18,7 @@ import {
   type OrderDoc,
 } from "../services/orders.ts";
 import { listPublicProductsCached } from "../services/catalog.ts";
+import { getSiteSettings } from "../services/site.ts";
 import { listPublicProducts, publicDetail, publicSummary, type Product } from "../services/products.ts";
 import { buildQuote, MAX_LINES } from "../services/quote.ts";
 import { publicContent, type ContentDoc } from "./admin/content.ts";
@@ -44,6 +45,9 @@ const quoteBody = z.object({
 const orderBody = quoteBody.extend({
   items: quoteBody.shape.items.min(1),
   // Only a name and phone number are asked for; the address is needed for delivery only.
+  // Bots tend to fill every field; people never see this one.
+  website: z.string().max(200).optional(),
+  turnstileToken: z.string().max(4096).optional(),
   customer: z.object({
     name: z.string().trim().min(2, "Enter your full name.").max(120),
     phone: z
@@ -54,6 +58,22 @@ const orderBody = quoteBody.extend({
     address: z.string().trim().max(300).optional(),
   }),
 });
+
+async function verifyChallenge(config: Deps["config"], token: string | undefined, ip: string | undefined) {
+  if (!token) throw new ApiError(403, "challenge_failed", "Please complete the security check and try again.");
+  try {
+    const response = await fetch(config.turnstileVerifyUrl, {
+      method: "POST",
+      body: new URLSearchParams({ secret: config.turnstileSecretKey!, response: token, ...(ip ? { remoteip: ip } : {}) }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const result = (await response.json()) as { success?: boolean };
+    if (result.success) return;
+  } catch (error) {
+    console.error("Turnstile verification failed", error);
+  }
+  throw new ApiError(403, "challenge_failed", "Please complete the security check and try again.");
+}
 
 // Public catalogue reads can be cached briefly by browsers and the Hosting CDN.
 const CACHE_PUBLIC = "public, max-age=30, s-maxage=60";
@@ -107,6 +127,13 @@ export function publicRoutes(deps: Deps) {
     return c.json(publicDetail(config.publicBaseUrl, { id: doc.id, ...(doc.data() as Omit<Product, "id">) }));
   });
 
+  // Contact details and banner text. Cached at the CDN; the storefront asks once per visit.
+  app.get("/api/v1/site", async (c) => {
+    const site = await getSiteSettings(store);
+    c.header("Cache-Control", "public, max-age=60, s-maxage=300");
+    return c.json(site);
+  });
+
   app.get("/api/v1/families", async (c) => {
     const counts = new Map<string, number>();
     for (const product of await listPublicProductsCached(store, config.catalogCacheMs, listPublicProducts)) counts.set(product.family, (counts.get(product.family) ?? 0) + 1);
@@ -156,6 +183,8 @@ export function publicRoutes(deps: Deps) {
       throw new ApiError(503, "checkout_unavailable", "Online checkout is not open yet.");
     }
     const body = await readJson(c, orderBody);
+    if (body.website) throw new ApiError(422, "invalid_request", "Your order could not be placed.");
+    if (config.turnstileSecretKey) await verifyChallenge(config, body.turnstileToken, c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim());
     const { order, payment } = await placeOrder(store, deps.payments, config, body);
     c.header("Cache-Control", "no-store");
     return c.json(

@@ -27,7 +27,18 @@ export type Config = {
   // Requests per minute per client (0 turns the limit off).
   rateLimitOrdersPerMin: number;
   rateLimitTrackPerMin: number;
+  // Cloudflare Turnstile. With no secret the challenge is off (the honeypot and limits stay on).
+  turnstileSecretKey: string | null;
+  turnstileVerifyUrl: string;
+  // An online buyer may have this many unpaid orders at once (stops stock hoarding).
+  maxPendingOrdersPerPhone: number;
 };
+
+// A secret that is empty, or the word "off", means the feature is switched off.
+export function secretOrNull(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? "";
+  return trimmed === "" || trimmed.toLowerCase() === "off" ? null : trimmed;
+}
 
 function flag(value: string | undefined): boolean {
   return value === "true" || value === "1";
@@ -55,13 +66,16 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     maxPhotosPerProduct: 16,
     maxVideosPerProduct: 4,
     catalogCacheMs: 30_000,
-    paystackSecretKey: env.PAYSTACK_SECRET_KEY?.trim() || null,
+    paystackSecretKey: secretOrNull(env.PAYSTACK_SECRET_KEY),
     paystackBaseUrl: (env.PAYSTACK_BASE_URL ?? "https://api.paystack.co").replace(/\/$/, ""),
     siteUrl: (env.SITE_URL ?? storefrontOrigins[0] ?? "http://localhost:5173").replace(/\/$/, ""),
     paymentEmailDomain: env.PAYMENT_EMAIL_DOMAIN ?? "customers.esspordecants.web.app",
     unpaidOrderMinutes: Number(env.UNPAID_ORDER_MINUTES ?? 45),
     rateLimitOrdersPerMin: 10,
     rateLimitTrackPerMin: 40,
+    turnstileSecretKey: secretOrNull(env.TURNSTILE_SECRET_KEY),
+    turnstileVerifyUrl: env.TURNSTILE_VERIFY_URL ?? "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    maxPendingOrdersPerPhone: 3,
     ...overrides,
   };
 }

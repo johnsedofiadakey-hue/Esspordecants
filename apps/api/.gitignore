@@ -2,3 +2,4 @@ data/
 dist/
 .env
 .env.local
+e2e/.dist

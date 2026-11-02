@@ -19,3 +19,12 @@ The storefront is deployed at https://esspordecants.web.app and the admin at htt
 ## Current boundaries
 
 The homepage uses clearly labelled generated concept imagery. Replace it with approved photos of the real decant bottle before opening sales. The reference mockup's 2, 5 and 10 ml sizes are illustrative; actual sizes, bottle design, first products, prices, payment provider, and delivery rules remain to be confirmed. The sites are deployed, but checkout is disabled and no real products are published.
+
+## More documentation
+
+- `docs/OPERATIONS.md`: go-live and running checklist (secrets, Paystack setup, backups, budget alerts, custom domain).
+- `docs/CLAUDE_REPORT.md`: what was built, how to run and test it, and what is left.
+- `docs/AUDIT_2026-11-02.md`: the audit of what a launch needs, with a status table at the end.
+- `docs/SHARED_CONTRACT.md`: the API between the storefront and the backend.
+
+Automated checks (`apps/api`, needs JDK 21 and Chrome): `npm test` for the API, `npm run e2e` for the storefront in a real browser.
