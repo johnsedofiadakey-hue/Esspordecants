@@ -299,6 +299,18 @@ function Home() {
   usePageTitle("Esspor Decants");
   const hero = usePlacement("home-hero");
   const story = usePlacement("home-story");
+  const [featured, setFeatured] = useState<ProductSummary[]>([]);
+  useEffect(() => {
+    let active = true;
+    listProducts()
+      .then((page) => {
+        if (active) setFeatured(page.items.slice(0, 3));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
   return (
     <>
       <div className="reading-progress" aria-hidden="true" />
@@ -350,9 +362,9 @@ function Home() {
               <div className="hero-actions">
                 <a
                   className="button button--orange"
-                  href={hero?.cta?.href || "/shop"}
+                  href={hero?.cta?.href || (featured.length ? "/shop" : "/how-it-works")}
                 >
-                  {hero?.cta?.label || "Shop decants"}{" "}
+                  {hero?.cta?.label || (featured.length ? "Shop decants" : "Discover Esspor")}{" "}
                   <span aria-hidden="true">→</span>
                 </a>
                 <a
@@ -451,9 +463,40 @@ function Home() {
               </a>
             </div>
             <p className="concept-note">
-              Mood images are visual concepts; published products will use
-              approved fragrance photos.
+              These mood images are editorial concepts. Product pages show the
+              actual Esspor decant separately from the original fragrance bottle.
             </p>
+          </section>
+          {featured.length > 0 ? (
+            <section className="featured section-pad" aria-labelledby="featured-title">
+              <div className="section-heading" data-reveal>
+                <div>
+                  <p className="eyebrow">From the collection</p>
+                  <h2 id="featured-title">Ready for discovery.</h2>
+                </div>
+                <a className="text-link" href="/shop">Shop all <span aria-hidden="true">→</span></a>
+              </div>
+              <div className="product-grid">
+                {featured.map((product) => <ProductCard key={product.id} product={product} />)}
+              </div>
+            </section>
+          ) : null}
+          <section className="decant-story section-pad" aria-labelledby="decant-story-title">
+            <div className="decant-story__image" data-reveal>
+              <img src="/concept/decant.webp" alt="Illustrative Esspor decant bottle concept" loading="lazy" decoding="async" />
+              <span>Concept vessel · real photos to follow</span>
+            </div>
+            <div className="decant-story__content" data-reveal>
+              <p className="eyebrow">Know what arrives</p>
+              <h2 id="decant-story-title">The fragrance is familiar. The format is yours.</h2>
+              <p>Esspor portions an original fragrance into a smaller atomizer. Each product page identifies the decant you receive and labels the original bottle as a source reference.</p>
+              <div className="decant-story__facts">
+                <div><span>01</span><p>Choose the size shown for that fragrance.</p></div>
+                <div><span>02</span><p>See the actual decant before you order.</p></div>
+                <div><span>03</span><p>Check the bottle and packaging details on its page.</p></div>
+              </div>
+              <a className="text-link" href="/how-it-works">How decanting works <span aria-hidden="true">→</span></a>
+            </div>
           </section>
           <section className="steps section-pad">
             <div className="steps-panel" data-reveal>
@@ -625,22 +668,15 @@ function Shop() {
             ))}
           </div>
         ) : (
-          <div className="status-panel">
-            <h2>
-              {state.error
-                ? "The collection is being prepared."
-                : "No fragrances found yet."}
-            </h2>
-            <p>
-              {state.error
-                ? "Approved products will appear here when the Esspor catalogue is connected."
-                : "Try another search or scent family."}
-            </p>
-            {!state.error && (
-              <a className="text-link" href="/shop">
-                View all scents →
-              </a>
-            )}
+          <div className="status-panel status-panel--collection">
+            <p className="eyebrow">{state.error ? "Collection update" : query || family ? "No match yet" : "Coming to Esspor"}</p>
+            <h2>{state.error ? "The collection is temporarily unavailable." : query || family ? "No fragrance matches this search." : "Our first fragrances are being prepared."}</h2>
+            <p>{state.error ? "Please try again shortly, or learn how Esspor decants work." : query || family ? "Try another fragrance name or scent family." : "Each listing will show the real Esspor decant, its size and price, and the original source bottle separately."}</p>
+            <div className="status-panel__actions">
+              {query || family ? <a className="button button--orange" href="/shop">View all scents →</a> : null}
+              <a className={query || family ? "text-link" : "button button--orange"} href="/how-it-works">How it works →</a>
+              {!query && !family ? <a className="text-link" href="/contact">Get in touch →</a> : null}
+            </div>
           </div>
         )}
       </main>
@@ -701,6 +737,7 @@ function ProductPage({
       : [product.heroImage]
     : [];
   const variant = product?.variants.find((item) => item.id === selectedVariant);
+  const activeImage = selectedImage === 0 && variant?.image ? variant.image : images[selectedImage];
   const canAdd = !preview && !!product?.available && !!variant?.available;
   function add() {
     if (!product || !variant || !canAdd) return;
@@ -744,7 +781,7 @@ function ProductPage({
               <a href="/">Home</a> / <a href="/shop">Shop</a> / {product.name}
             </p>
             <div className="product-layout">
-              <div className="product-gallery">
+              <div className="product-gallery" data-reveal>
                 <div className="product-main-image">
                   {isVideo(images[selectedImage]) ? (
                     <video
@@ -758,26 +795,20 @@ function ProductPage({
                   ) : (
                     <img
                       key={`${selectedImage}-${selectedVariant}`}
-                      src={
-                        (selectedImage === 0 && variant?.image?.url) ||
-                        images[selectedImage]?.url ||
-                        product.heroImage.url
-                      }
-                      alt={
-                        (selectedImage === 0 && variant?.image?.alt) ||
-                        images[selectedImage]?.alt ||
-                        product.heroImage.alt
-                      }
+                      src={activeImage?.url || product.heroImage.url}
+                      alt={activeImage?.alt || product.heroImage.alt}
                     />
                   )}
                   <span className="image-role">
                     {images[selectedImage]?.role === "source-bottle"
-                      ? "Original source bottle"
+                      ? "Original fragrance bottle"
                       : images[selectedImage]?.role === "editorial"
                         ? preview
                           ? "Editorial concept"
                           : "Editorial"
-                        : "Esspor decant"}
+                        : preview
+                          ? "Decant bottle concept"
+                          : "The decant you receive"}
                     {isVideo(images[selectedImage]) ? " · video" : ""}
                   </span>
                 </div>
@@ -804,13 +835,18 @@ function ProductPage({
                           </span>
                         </>
                       ) : (
-                        <img src={image.url} alt="" loading="lazy" decoding="async" />
+                        <img src={index === 0 && variant?.image?.url ? variant.image.url : image.url} alt="" loading="lazy" decoding="async" />
                       )}
                     </button>
                   ))}
                 </div>
+                <p className="product-gallery__note">
+                  {preview
+                    ? "Illustrative bottle for layout review. Final Esspor vessel and label photography will replace it."
+                    : "The decant is shown first. Original fragrance bottle photos are labelled as source references."}
+                </p>
               </div>
-              <div className="product-info">
+              <div className="product-info" data-reveal>
                 <p className="eyebrow">Decanted by Esspor</p>
                 <h1>{product.name}</h1>
                 <p className="product-house">
@@ -842,8 +878,19 @@ function ProductPage({
                     ))}
                   </div>
                   <p className="variant-help">
-                    A travel-size decant prepared from the original fragrance.
+                    Size refers to the Esspor decant you receive, not the original full-size bottle.
                   </p>
+                </div>
+                <div className="product-receive" aria-live="polite">
+                  <span className="eyebrow">What arrives</span>
+                  <p>{product.whatArrives}</p>
+                  <small>
+                    {preview
+                      ? "Final bottle, label and packaging are still to be confirmed."
+                      : variant?.image
+                        ? `The gallery shows the bottle for this ${variant.sizeMl} ml size.`
+                        : "The gallery shows the Esspor decant for this fragrance."}
+                  </small>
                 </div>
                 <div className="product-buy">
                   <strong>
@@ -899,10 +946,6 @@ function ProductPage({
                   <div>
                     <h2>About the scent</h2>
                     <p>{product.description}</p>
-                  </div>
-                  <div>
-                    <h2>What arrives</h2>
-                    <p>{product.whatArrives}</p>
                   </div>
                   <div>
                     <h2>Authenticity</h2>
@@ -1846,7 +1889,6 @@ function App() {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (preference.matches) return;
 
-    const revealItems = document.querySelectorAll<HTMLElement>("[data-reveal]");
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -1857,7 +1899,19 @@ function App() {
       },
       { threshold: 0.12, rootMargin: "0px 0px -32px 0px" },
     );
-    revealItems.forEach((item) => observer.observe(item));
+    const observeReveals = (root: ParentNode) => {
+      if (root instanceof HTMLElement && root.matches("[data-reveal]")) observer.observe(root);
+      root.querySelectorAll<HTMLElement>("[data-reveal]").forEach((item) => observer.observe(item));
+    };
+    observeReveals(document);
+    const mutations = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof HTMLElement) observeReveals(node);
+        }
+      }
+    });
+    mutations.observe(document.getElementById("root") || document.body, { childList: true, subtree: true });
     document.documentElement.classList.add("motion-ready");
 
     const hero = document.querySelector<HTMLElement>(".hero");
@@ -1887,6 +1941,7 @@ function App() {
     window.addEventListener("resize", schedule);
     return () => {
       observer.disconnect();
+      mutations.disconnect();
       window.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
       if (frame) cancelAnimationFrame(frame);
