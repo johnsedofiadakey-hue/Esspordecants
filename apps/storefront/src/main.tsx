@@ -80,6 +80,10 @@ function Header({ dark = false }: { dark?: boolean }) {
   const items = useBag();
   const count = items.reduce((sum, item) => sum + item.quantity, 0);
   return (
+    <>
+    <div className="announce-bar" role="note">
+      <p>Order before 8PM for next-day delivery | Mon–Fri</p>
+    </div>
     <header className={`site-header ${dark ? "site-header--dark" : ""}`}>
       <a className="brand" href="/" aria-label="Esspor Decants home">
         <img
@@ -112,6 +116,7 @@ function Header({ dark = false }: { dark?: boolean }) {
         <span />
       </button>
     </header>
+    </>
   );
 }
 
@@ -332,7 +337,7 @@ function Home() {
           <section className="steps section-pad">
             <div className="steps-panel" data-reveal>
               <p className="eyebrow eyebrow--light">
-                Small portions. Big possibilities.
+                Small bottle. Big vibes.
               </p>
               <h2>Find it. Try it. Fall for it.</h2>
               <div className="steps-grid">
@@ -450,7 +455,7 @@ function Shop() {
           <p className="eyebrow">The collection</p>
           <h1>Find your fragrance.</h1>
           <p>
-            Explore authentic designer and niche fragrances in Esspor decants.
+            Explore authentic Arabian, designer and niche fragrances in decants.
           </p>
         </div>
         <div className="catalog-toolbar">
@@ -946,9 +951,9 @@ function HowItWorks() {
         <div className="page-hero">
           <p className="eyebrow">The Esspor way</p>
           <h1>
-            Small portions.
+            Small bottle.
             <br />
-            Big possibilities.
+            Big vibes.
           </h1>
           <p>Explore fragrances without committing to a full-size bottle.</p>
         </div>
