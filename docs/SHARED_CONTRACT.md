@@ -178,7 +178,7 @@ Additive except where marked. The storefront is updated to match (gallery, `/bag
 - **Photos and videos.** A product can carry any number of approved photos and short videos.
   - Each `images[]` entry gains `kind: "image" | "video"` and `mime`. A missing `kind` means a photo.
   - Ordering is by role (as before), then photos before videos, then the admin's order. `images[0]` and `heroImage` are always photos, and variant `image` is always a photo.
-  - Videos are MP4, MOV or WebM, up to 25 MB. Photos stay JPEG, PNG or WebP, up to 8 MB. File type is checked from the file's bytes, not its name.
+  - Videos are MP4, MOV or WebM, up to 20 MB. Photos stay JPEG, PNG or WebP, up to 5 MB (the admin shrinks them to about 1800 px WebP before upload). A product can have up to 16 photos and 4 videos (`422 media_limit`). File type is checked from the file's bytes, not its name.
   - `GET /media/<file>` supports `Range` requests (`206 Partial Content`), which video seeking and Safari need. Videos have no poster frame; the storefront uses the first frame (`#t=0.1`).
   - Videos must be approved and carry a description (`alt`) like photos, and physical roles need the "real footage" confirmation.
 - **Fulfilment.** Each delivery option has `method: "delivery" | "pickup"` (old options count as `delivery`). Customers pick one option at checkout; a `pickup` option needs no address.

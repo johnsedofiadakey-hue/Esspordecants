@@ -7,6 +7,7 @@ import { fold } from "../lib/util.ts";
 import { parse, readJson } from "../lib/validate.ts";
 import { mediaResponse, MEDIA_FILE } from "../services/images.ts";
 import { placeOrder } from "../services/orders.ts";
+import { listPublicProductsCached } from "../services/catalog.ts";
 import { listPublicProducts, publicDetail, publicSummary, type Product } from "../services/products.ts";
 import { buildQuote, MAX_LINES } from "../services/quote.ts";
 import { publicContent, type ContentDoc } from "./admin/content.ts";
@@ -46,6 +47,9 @@ const orderBody = quoteBody.extend({
 
 // Public catalogue reads can be cached briefly by browsers and the Hosting CDN.
 const CACHE_PUBLIC = "public, max-age=30, s-maxage=60";
+// File names are unique per upload and never reused, so media can be cached for a day.
+// Unpublishing or deleting an item therefore takes up to a day to disappear from the CDN.
+const MEDIA_CACHE = "public, max-age=86400, s-maxage=86400";
 
 function searchText(product: Product) {
   return fold(
@@ -65,7 +69,7 @@ export function publicRoutes(deps: Deps) {
     const query = parse(listQuery, c.req.query());
     const needle = fold(query.query);
     const family = fold(query.family);
-    const matches = (await listPublicProducts(store))
+    const matches = (await listPublicProductsCached(store, config.catalogCacheMs, listPublicProducts))
       .filter((product) => !needle || searchText(product).includes(needle))
       .filter((product) => !family || fold(product.family) === family)
       .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "") || a.name.localeCompare(b.name));
@@ -95,7 +99,7 @@ export function publicRoutes(deps: Deps) {
 
   app.get("/api/v1/families", async (c) => {
     const counts = new Map<string, number>();
-    for (const product of await listPublicProducts(store)) counts.set(product.family, (counts.get(product.family) ?? 0) + 1);
+    for (const product of await listPublicProductsCached(store, config.catalogCacheMs, listPublicProducts)) counts.set(product.family, (counts.get(product.family) ?? 0) + 1);
     c.header("Cache-Control", CACHE_PUBLIC);
     return c.json({
       items: [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, count })),
@@ -170,12 +174,14 @@ export function publicRoutes(deps: Deps) {
   app.get("/media/:file", async (c) => {
     const file = c.req.param("file");
     if (!MEDIA_FILE.test(file)) throw notFound("Image");
-    const [products, content] = await Promise.all([
-      store.db.collection(COLLECTIONS.products).where("publicFiles", "array-contains", file).limit(1).get(),
-      store.db.collection(COLLECTIONS.content).where("publicFiles", "array-contains", file).limit(1).get(),
-    ]);
-    if (products.empty && content.empty) throw notFound("Image");
-    const response = await mediaResponse(store.bucket, file, c.req.header("range"), "public, max-age=3600, s-maxage=3600", {
+    // Product media is by far the common case, so ask about content only if it misses.
+    // That keeps a cache-missing media request to a single Firestore read.
+    const products = await store.db.collection(COLLECTIONS.products).where("publicFiles", "array-contains", file).limit(1).get();
+    if (products.empty) {
+      const content = await store.db.collection(COLLECTIONS.content).where("publicFiles", "array-contains", file).limit(1).get();
+      if (content.empty) throw notFound("Image");
+    }
+    const response = await mediaResponse(store.bucket, file, c.req.header("range"), MEDIA_CACHE, {
       "Cross-Origin-Resource-Policy": "cross-origin",
     });
     if (!response) throw notFound("Image");

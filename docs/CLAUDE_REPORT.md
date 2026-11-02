@@ -196,12 +196,12 @@ Removed in this version: `auth/login`, `auth/logout` and `auth/password`. Fireba
 Requested by the merchant: several images and videos per product, a short customer journey, and a checkout that asks only for a full name, a phone number and (for delivery) an address, with a choice of pickup or delivery.
 
 **Media**
-- `apps/api/src/services/images.ts`: videos (MP4, MOV, WebM) are accepted next to photos, detected by content. `kind` is stored per file; records without it are photos. Limits: photos 8 MB, videos 25 MB (`maxVideoBytes`).
+- `apps/api/src/services/images.ts`: videos (MP4, MOV, WebM) are accepted next to photos, detected by content. `kind` is stored per file; records without it are photos. Limits: photos 5 MB, videos 20 MB, 16 photos and 4 videos per product (see section 10 and `docs/AUDIT_2026-11-02.md`).
 - Media is streamed with `Range` support (`mediaResponse`) on both `/media/:file` and the admin preview route.
 - Hero images, variant photos and the "real decant-front photo" publish gate only ever use photos. The editorial library still takes photos only.
 - Admin, **Photos and videos**: pick many files at once, with one shared role and real-media confirmation; add the description per item afterwards, then approve. Cards play videos and have earlier/later buttons for ordering within a role.
 - Storefront product page: thumbnails show a play badge for videos, and selecting one plays it in the main viewer.
-- **Open risk**: uploads and video playback go through the Cloud Function (32 MiB request limit) behind Firebase Hosting. This is why videos are capped at 25 MB. It was verified against the emulators and a local build only, not on the live site. Longer videos would need direct-to-storage signed uploads.
+- **Open risk**: uploads and video playback go through the Cloud Function (32 MiB request limit) behind Firebase Hosting. This is why videos are capped at 20 MB. It was verified against the emulators and a local build only, not on the live site. Longer videos would need direct-to-storage signed uploads.
 
 **Checkout**
 - `/bag` is bag and checkout on one page. Fulfilment options come from Settings → Delivery options, which now have a type (Delivery or Pickup).
@@ -213,3 +213,25 @@ Requested by the merchant: several images and videos per product, a short custom
 - API typecheck, admin build and storefront build pass.
 - A headless Chrome run against the emulators and a local build covered: mixed gallery with video, add to bag, pickup then courier (fee added to the total), address field appearing only for delivery, browser-side validation blocking an empty form, order placed with a confirmation and an emptied bag, and no horizontal scroll at 390 px.
 - **Not checked by eye**: the admin screens (typecheck and build only) and a real, playable video. The local fixture's video bytes are not a real video.
+
+## 10. Keeping Firebase costs down (2026-11-02)
+
+Served bytes (egress), function time and Firestore reads are what grow with traffic. Changes made:
+
+- **Smaller media in**: the admin shrinks photos in the browser to at most 1800 px WebP before upload (a 4000×3000 test image became 1800×1350). Server caps: photos 5 MB, videos 20 MB, 16 photos and 4 videos per product (`media_limit`).
+- **Smaller media out**: the two concept images on the home and product pages go from 1.9 MB and 1.5 MB (PNG) to 91 KB and 25 KB (WebP). The PNG originals are still in `public/concept` but no longer referenced. Gallery thumbnails and bag images load lazily.
+- **Videos only download when played**: the main viewer uses `preload="none"` and video thumbnails are a static play tile, so opening a product page no longer fetches any video bytes.
+- **Caching**: public media is cached for a day at the CDN and browser (`public, max-age=86400, s-maxage=86400`; was an hour), and `/brand/**` and `/concept/**` for a week. Cost: unpublishing or deleting media takes up to a day to disappear from the CDN.
+- **Fewer Firestore reads**: a media request now costs one read, not two. The published catalogue is held in memory for 30 seconds (`catalogCacheMs`) and cleared by our own writes, so a bot changing `?query=` to dodge the CDN costs one scan per 30 seconds per instance, not one per request.
+- **Verification**: API tests 25 of 25 (new: media caps, cache header, catalogue cache). The photo shrinking was run in headless Chrome. Dollar savings were not measured.
+
+**Still open**:
+- Video range requests (`206`) are not cached by the Hosting CDN, so seeking in a video reaches the function. Fine for a few short clips; for heavier video use, serve from Cloud Storage with signed URLs or put the media behind Cloud CDN.
+- No billing budget or alert exists yet. Create one (it only alerts, it does not cap spending):
+
+  ```sh
+  gcloud billing budgets create --billing-account=BILLING_ACCOUNT_ID \
+    --display-name="Esspor monthly" --budget-amount=25USD \
+    --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0
+  ```
+- `maxInstances: 10` on the function is the hard ceiling on a traffic spike; lower it if you would rather refuse traffic than pay for it.

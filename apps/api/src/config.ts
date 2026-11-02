@@ -8,8 +8,13 @@ export type Config = {
   mediaBucket: string;
   checkoutEnabled: boolean;
   maxUploadBytes: number;
-  // Videos pass through the function, which accepts requests up to 32 MiB.
+  // Videos pass through the function, which accepts requests up to 32 MiB. The caps
+  // below are deliberately small: every byte served is billed as egress.
   maxVideoBytes: number;
+  maxPhotosPerProduct: number;
+  maxVideosPerProduct: number;
+  // How long the published catalogue is held in memory between Firestore scans.
+  catalogCacheMs: number;
 };
 
 function flag(value: string | undefined): boolean {
@@ -32,8 +37,11 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
       .filter(Boolean),
     mediaBucket: env.MEDIA_BUCKET ?? "esspordecants-media",
     checkoutEnabled: flag(env.CHECKOUT_ENABLED),
-    maxUploadBytes: 8 * 1024 * 1024,
-    maxVideoBytes: 25 * 1024 * 1024,
+    maxUploadBytes: 5 * 1024 * 1024,
+    maxVideoBytes: 20 * 1024 * 1024,
+    maxPhotosPerProduct: 16,
+    maxVideosPerProduct: 4,
+    catalogCacheMs: 30_000,
     ...overrides,
   };
 }

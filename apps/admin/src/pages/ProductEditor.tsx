@@ -28,6 +28,7 @@ import {
   AuthImage,
   AuthVideo,
 } from "../components/ui.tsx";
+import { preparePhoto } from "../media.ts";
 import { navigate } from "../router.ts";
 
 const CONCENTRATIONS = ["Parfum", "Extrait de Parfum", "Eau de Parfum", "Eau de Toilette", "Eau de Cologne", "Eau Fraîche"];
@@ -353,8 +354,10 @@ export function ProductEditor({ id }: { id: string }) {
 
 // ---------- Images ----------
 
-const MAX_PHOTO_MB = 8;
-const MAX_VIDEO_MB = 25;
+const MAX_PHOTO_MB = 5;
+const MAX_VIDEO_MB = 20;
+const MAX_PHOTOS = 16;
+const MAX_VIDEOS = 4;
 
 function Images({ product, onChange }: { product: Product; onChange: () => Promise<void> }) {
   const [role, setRole] = useState<ImageRole>("decant-front");
@@ -372,7 +375,17 @@ function Images({ product, onChange }: { product: Product; onChange: () => Promi
     if (!files.length) return;
     setProgress({ done: 0, total: files.length });
     const failed: string[] = [];
-    for (const [index, file] of files.entries()) {
+    let saved = 0;
+    for (const [index, original] of files.entries()) {
+      const isVideo = original.type.startsWith("video/");
+      if (isVideo && original.size > MAX_VIDEO_MB * 1024 * 1024) {
+        failed.push(`${original.name}: videos must be under ${MAX_VIDEO_MB} MB. Export at 720p and keep it short.`);
+        setProgress({ done: index + 1, total: files.length });
+        continue;
+      }
+      const prepared = isVideo ? { file: original, savedBytes: 0 } : await preparePhoto(original);
+      saved += prepared.savedBytes;
+      const file = prepared.file;
       const form = new FormData();
       form.set("file", file);
       form.set("role", role);
@@ -390,7 +403,8 @@ function Images({ product, onChange }: { product: Product; onChange: () => Promi
     await onChange();
     if (failed.length) toast.error(new Error(failed.join(" ")));
     if (failed.length < files.length) {
-      toast.ok(`${files.length - failed.length} uploaded. Add alt text, then approve each to make it public.`);
+      const shrunk = saved > 100 * 1024 ? ` Photos were shrunk by ${(saved / 1024 / 1024).toFixed(1)} MB to keep the site fast.` : "";
+      toast.ok(`${files.length - failed.length} uploaded.${shrunk} Add a description, then approve each to make it public.`);
     }
   }
 
@@ -413,10 +427,10 @@ function Images({ product, onChange }: { product: Product; onChange: () => Promi
   }
 
   return (
-    <Card title="Photos and videos" actions={<span className="muted small">Photos: JPEG, PNG or WebP, min 400 × 400, max {MAX_PHOTO_MB} MB · Videos: MP4, MOV or WebM, max {MAX_VIDEO_MB} MB</span>}>
+    <Card title="Photos and videos" actions={<span className="muted small">Photos: JPEG, PNG or WebP, min 400 × 400 · Videos: MP4, MOV or WebM, max {MAX_VIDEO_MB} MB · Up to {MAX_PHOTOS} photos and {MAX_VIDEOS} videos</span>}>
       <Notice>
         Upload real photographs and short videos of the Esspor decant. Concept renders and generated media must not be approved. The first public item is
-        always a decant-front photo; source-bottle media is labelled as the original bottle. Choose as many files as you like in one go.
+        always a decant-front photo; source-bottle media is labelled as the original bottle. Choose several files at once. Photos are resized automatically. Every byte shown to a visitor is billed, so keep videos short (about 15 seconds) and exported at 720p.
       </Notice>
       <form className="upload" onSubmit={upload}>
         <Field label="Role" hint={roleHint}>

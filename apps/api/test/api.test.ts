@@ -215,6 +215,40 @@ describe("Esspor API", () => {
     assert.equal(big.data.error.code, "file_too_large");
   });
 
+  test("media is cached for a day and capped per product", async () => {
+    const detail = await call(ctx.app, "GET", "/api/v1/products/maison-verite-cedre-lumiere");
+    const file = detail.data.images[0].url.split("/").pop();
+    const media = await call(ctx.app, "GET", `/media/${file}`);
+    assert.equal(media.headers.get("cache-control"), "public, max-age=86400, s-maxage=86400");
+
+    const capped = createApp({ store: ctx.store, config: { ...ctx.config, maxVideosPerProduct: 2, maxPhotosPerProduct: 3 } });
+    const session = await login(capped);
+    const video = await session.admin("POST", `/products/${productId}/images`, { form: mediaForm({ role: "editorial" }, mp4(2048), "extra.mp4", "video/mp4") });
+    assert.equal(video.status, 422);
+    assert.equal(video.data.error.code, "media_limit");
+    const photo = await session.admin("POST", `/products/${productId}/images`, { form: imageForm({ role: "editorial" }) });
+    assert.equal(photo.status, 422);
+    assert.equal(photo.data.error.code, "media_limit");
+    const after = await session.admin("GET", `/products/${productId}`);
+    assert.equal(after.data.images.length, 5, "a refused upload leaves nothing attached");
+  });
+
+  test("the public catalogue is held briefly, and our own writes clear it", async () => {
+    const cached = createApp({ store: ctx.store, config: { ...ctx.config, catalogCacheMs: 60_000 } });
+    const session = await login(cached);
+    const read = async () => (await call(cached, "GET", "/api/v1/products?query=cedre")).data.items[0].shortDescription;
+    const original = await read();
+    await ctx.store.db.collection("products").doc(productId).update({ shortDescription: "Changed behind the API's back" });
+    assert.equal(await read(), original, "a second read within the window does not rescan Firestore");
+    const patched = await session.admin("PATCH", `/products/${productId}`, { body: { shortDescription: original } });
+    assert.equal(patched.status, 200);
+    assert.equal(await read(), original);
+    await ctx.store.db.collection("products").doc(productId).update({ shortDescription: "Changed again" });
+    assert.equal(await read(), original, "still cached after the write cleared and refilled it");
+    await session.admin("PATCH", `/products/${productId}`, { body: { shortDescription: original } });
+    assert.equal(await read(), original);
+  });
+
   test("quote uses server prices and stock", async () => {
     const res = await call(ctx.app, "POST", "/api/v1/checkout/quote", {
       body: { items: [{ variantId, quantity: 2 }, { variantId: "missing", quantity: 1 }] },

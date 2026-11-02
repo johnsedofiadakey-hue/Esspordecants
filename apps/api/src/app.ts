@@ -49,7 +49,7 @@ export function createApp(input: { store: Store; config: Config; payments?: Paym
   const uploadLimit = bodyLimit({
     maxSize: Math.max(config.maxUploadBytes, config.maxVideoBytes) + 64 * 1024,
     onError: () => {
-      throw new ApiError(413, "file_too_large", "That file is too large. Photos must be under 8 MB and videos under 25 MB.");
+      throw new ApiError(413, "file_too_large", `That file is too large. Photos must be under ${Math.round(config.maxUploadBytes / 1024 / 1024)} MB and videos under ${Math.round(config.maxVideoBytes / 1024 / 1024)} MB.`);
     },
   });
   app.use("/api/v1/*", jsonLimit);

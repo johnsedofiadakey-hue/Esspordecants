@@ -35,6 +35,7 @@ import {
   type ProductDoc,
   type VariantRec,
 } from "../../services/products.ts";
+import { invalidateCatalog } from "../../services/catalog.ts";
 import { refreshContentForImage } from "./content.ts";
 
 const productFields = z.object({
@@ -174,6 +175,7 @@ export function productRoutes(deps: Deps) {
       applyPatch(product, { ...input, slug: undefined, house: undefined, name: undefined });
       tx.set(products.doc(id), finalize(product));
     });
+    invalidateCatalog(store);
     await audit(store, user.id, "create", "product", id, { slug });
     return c.json(adminProduct(await getProduct(store, id)), 201);
   });
@@ -228,6 +230,7 @@ export function productRoutes(deps: Deps) {
     const ordered = await store.db.collection(COLLECTIONS.orders).where("productIds", "array-contains", id).limit(1).get();
     if (!ordered.empty) throw conflict("product_has_orders", "This product appears in orders. Archive it instead.");
     await products.doc(id).delete();
+    invalidateCatalog(store);
     await Promise.all(product.images.map((image) => deleteImageFile(store.bucket, image.fileName)));
     await audit(store, c.get("user").id, "delete", "product", id, { slug: product.slug });
     return c.json({ ok: true });
@@ -337,6 +340,15 @@ export function productRoutes(deps: Deps) {
     });
     try {
       await mutateProduct(store, productId, (product) => {
+        // Checked inside the transaction so two uploads cannot both slip past the cap.
+        const videos = product.images.filter((entry) => mediaKind(entry) === "video").length;
+        const photos = product.images.length - videos;
+        if (mediaKind(image) === "video" && videos >= config.maxVideosPerProduct) {
+          throw new ApiError(422, "media_limit", `A product can have up to ${config.maxVideosPerProduct} videos. Delete one first.`);
+        }
+        if (mediaKind(image) === "image" && photos >= config.maxPhotosPerProduct) {
+          throw new ApiError(422, "media_limit", `A product can have up to ${config.maxPhotosPerProduct} photos. Delete one first.`);
+        }
         product.images.push(image);
       });
     } catch (error) {

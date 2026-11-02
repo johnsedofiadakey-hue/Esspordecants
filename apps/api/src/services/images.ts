@@ -95,7 +95,7 @@ export type ImageRec = {
 
 export const mediaKind = (image: Pick<ImageRec, "kind">): MediaKind => image.kind ?? "image";
 
-export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 
 export type UploadInput = {
   data: Buffer;

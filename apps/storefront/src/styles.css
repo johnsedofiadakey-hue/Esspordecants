@@ -178,7 +178,7 @@ select:focus-visible {
 .hero-image {
   position: absolute;
   inset: 0;
-  background: url("/concept/hero.png") center center/cover no-repeat;
+  background: url("/concept/hero.webp") center center/cover no-repeat;
   transform: translate3d(0, var(--hero-parallax, 0px), 0) scale(1.045);
   transform-origin: center;
 }
@@ -401,14 +401,14 @@ p {
   transform: scale(1.055);
 }
 .mood-card--woody .mood-card__image {
-  background-image: url("/concept/hero.png");
+  background-image: url("/concept/hero.webp");
   background-position: 78% center;
 }
 .mood-card--fresh {
   background: var(--orange);
 }
 .mood-card--fresh .mood-card__image {
-  background-image: url("/concept/decant.png");
+  background-image: url("/concept/decant.webp");
 }
 .mood-card--floral {
   background: var(--peach);
@@ -417,7 +417,7 @@ p {
 .mood-card--floral .mood-card__image {
   background-image:
     linear-gradient(rgba(253, 202, 151, 0.1), rgba(253, 202, 151, 0.1)),
-    url("/concept/decant.png");
+    url("/concept/decant.webp");
 }
 .mood-card__body {
   position: relative;
@@ -712,10 +712,20 @@ p {
   font-size: 15px;
   font-weight: 700;
 }
+.product-gallery {
+  min-width: 0;
+}
 .thumbnail-row {
   display: flex;
   gap: 12px;
   margin-top: 14px;
+  /* Products can have many photos and videos; the row scrolls instead of widening the page. */
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+.thumbnail-row button {
+  flex: 0 0 auto;
 }
 .thumbnail-row button {
   width: 100px;
@@ -738,6 +748,9 @@ p {
 }
 .thumbnail-row button {
   position: relative;
+}
+.thumbnail-row button:has(.play-badge) {
+  background: #2a1810;
 }
 .play-badge {
   position: absolute;

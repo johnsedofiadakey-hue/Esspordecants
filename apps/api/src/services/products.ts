@@ -2,6 +2,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import { COLLECTIONS, type Store } from "../firebase.ts";
 import { ApiError, conflict, notFound } from "../lib/errors.ts";
 import { now } from "../lib/util.ts";
+import { invalidateCatalog } from "./catalog.ts";
 import { approvalProblems, mediaKind, sortImages, type ImageRec, type ImageRole, type MediaKind } from "./images.ts";
 
 export type ProductStatus = "draft" | "published" | "archived";
@@ -227,7 +228,7 @@ export async function mutateProduct<T>(
   id: string,
   change: (product: ProductDoc, tx: Transaction) => T | Promise<T>,
 ): Promise<{ product: Product; result: T }> {
-  return store.db.runTransaction(async (tx) => {
+  const written = await store.db.runTransaction(async (tx) => {
     const { id: _id, ...product } = await getProduct(store, id, tx);
     const result = await change(product, tx);
     finalize(product);
@@ -246,6 +247,8 @@ export async function mutateProduct<T>(
     tx.set(products(store).doc(id), product);
     return { product: { id, ...product }, result };
   });
+  invalidateCatalog(store);
+  return written;
 }
 
 // ---------- Admin serialization ----------

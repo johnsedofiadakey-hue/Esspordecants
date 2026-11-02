@@ -2,6 +2,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import { COLLECTIONS, type Store } from "../firebase.ts";
 import { ApiError, notFound } from "../lib/errors.ts";
 import { newId, now } from "../lib/util.ts";
+import { invalidateCatalog } from "./catalog.ts";
 import type { PaymentAdapter } from "./payments.ts";
 import { finalize, type Product, type ProductDoc } from "./products.ts";
 import { activeDeliveryOptions, mergeLines, priceQuote, productsForVariants, type FulfilmentMethod, type QuoteInput } from "./quote.ts";
@@ -218,6 +219,7 @@ export async function placeOrder(store: Store, payments: PaymentAdapter, input: 
     tx.set(orders(store).doc(id), order);
     return { order, payment };
   });
+  invalidateCatalog(store);
   return { order: { id, ...result.order }, payment: result.payment };
 }
 
@@ -229,7 +231,7 @@ export async function getOrderDoc(store: Store, id: string, tx?: Transaction): P
 }
 
 export async function transitionOrder(store: Store, orderId: string, to: OrderStatus, note: string, actor: NonNullable<Actor>) {
-  return store.db.runTransaction(async (tx) => {
+  const updated = await store.db.runTransaction(async (tx) => {
     const order = await getOrderDoc(store, orderId, tx);
     if (!ORDER_TRANSITIONS[order.status].includes(to)) {
       throw new ApiError(409, "invalid_transition", `An order that is ${order.status.replace("_", " ")} cannot move to ${to.replace("_", " ")}.`);
@@ -260,6 +262,8 @@ export async function transitionOrder(store: Store, orderId: string, to: OrderSt
     tx.set(orders(store).doc(orderId), order);
     return { id: orderId, ...order };
   });
+  invalidateCatalog(store);
+  return updated;
 }
 
 export function orderSummary(order: OrderDoc & { id: string }) {

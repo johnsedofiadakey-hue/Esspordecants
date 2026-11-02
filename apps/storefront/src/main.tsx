@@ -36,7 +36,7 @@ const previewProduct: Product = {
   family: "Warm & woody",
   shortDescription: "A layout preview for an Esspor decant.",
   heroImage: {
-    url: "/concept/decant.png",
+    url: "/concept/decant.webp",
     alt: "Illustrative concept of a travel-size decant; final bottle photography pending",
     role: "decant-front",
   },
@@ -48,12 +48,12 @@ const previewProduct: Product = {
   notes: { top: [], heart: [], base: [] },
   images: [
     {
-      url: "/concept/decant.png",
+      url: "/concept/decant.webp",
       alt: "Illustrative decant bottle concept",
       role: "decant-front",
     },
     {
-      url: "/concept/hero.png",
+      url: "/concept/hero.webp",
       alt: "Editorial concept featuring a small decant bottle",
       role: "editorial",
     },
@@ -634,7 +634,7 @@ function ProductPage({
                       src={images[selectedImage]?.url}
                       controls
                       playsInline
-                      preload="metadata"
+                      preload="none"
                       aria-label={images[selectedImage]?.alt || "Product video"}
                     />
                   ) : (
@@ -680,13 +680,13 @@ function ProductPage({
                     >
                       {isVideo(image) ? (
                         <>
-                          <video src={`${image.url}#t=0.1`} muted playsInline preload="metadata" tabIndex={-1} />
+                          {/* No network request: the clip only downloads when someone presses play. */}
                           <span className="play-badge" aria-hidden="true">
                             ▶
                           </span>
                         </>
                       ) : (
-                        <img src={image.url} alt="" />
+                        <img src={image.url} alt="" loading="lazy" decoding="async" />
                       )}
                     </button>
                   ))}
@@ -977,7 +977,7 @@ function Bag() {
                 const unavailable = error?.code === "variant_unavailable" || error?.code === "out_of_stock";
                 return (
                   <div className="bag-item" key={item.variantId}>
-                    <img src={item.imageUrl} alt={`${item.name} Esspor decant`} />
+                    <img src={item.imageUrl} alt={`${item.name} Esspor decant`} loading="lazy" decoding="async" />
                     <div>
                       <p className="eyebrow">{item.house}</p>
                       <h2>
