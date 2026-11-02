@@ -8,6 +8,8 @@ export type Config = {
   mediaBucket: string;
   checkoutEnabled: boolean;
   maxUploadBytes: number;
+  // Videos pass through the function, which accepts requests up to 32 MiB.
+  maxVideoBytes: number;
 };
 
 function flag(value: string | undefined): boolean {
@@ -31,6 +33,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     mediaBucket: env.MEDIA_BUCKET ?? "esspordecants-media",
     checkoutEnabled: flag(env.CHECKOUT_ENABLED),
     maxUploadBytes: 8 * 1024 * 1024,
+    maxVideoBytes: 25 * 1024 * 1024,
     ...overrides,
   };
 }

@@ -45,6 +45,10 @@ export function setBagQuantity(variantId: string, quantity: number) {
   );
 }
 
+export function clearBag() {
+  writeBag([]);
+}
+
 export function subscribeBag(callback: () => void) {
   window.addEventListener(eventName, callback);
   return () => window.removeEventListener(eventName, callback);

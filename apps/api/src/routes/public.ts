@@ -5,7 +5,7 @@ import { COLLECTIONS } from "../firebase.ts";
 import { ApiError, notFound } from "../lib/errors.ts";
 import { fold } from "../lib/util.ts";
 import { parse, readJson } from "../lib/validate.ts";
-import { MEDIA_FILE, MEDIA_TYPES, readImageFile } from "../services/images.ts";
+import { mediaResponse, MEDIA_FILE } from "../services/images.ts";
 import { placeOrder } from "../services/orders.ts";
 import { listPublicProducts, publicDetail, publicSummary, type Product } from "../services/products.ts";
 import { buildQuote, MAX_LINES } from "../services/quote.ts";
@@ -32,17 +32,15 @@ const quoteBody = z.object({
 
 const orderBody = quoteBody.extend({
   items: quoteBody.shape.items.min(1),
+  // Only a name and phone number are asked for; the address is needed for delivery only.
   customer: z.object({
-    name: z.string().trim().min(2).max(120),
-    email: z.email().max(200),
-    phone: z.string().trim().min(7).max(30),
-    address: z.object({
-      line1: z.string().trim().min(2).max(200),
-      line2: z.string().trim().max(200).optional(),
-      city: z.string().trim().min(2).max(100),
-      region: z.string().trim().min(2).max(100),
-      notes: z.string().trim().max(500).optional(),
-    }),
+    name: z.string().trim().min(2, "Enter your full name.").max(120),
+    phone: z
+      .string()
+      .trim()
+      .max(30)
+      .regex(/^\+?[0-9][0-9 ()-]{6,}$/, "Enter a phone number we can reach you on."),
+    address: z.string().trim().max(300).optional(),
   }),
 });
 
@@ -147,6 +145,9 @@ export function publicRoutes(deps: Deps) {
         order: {
           number: order.number,
           status: order.status,
+          fulfilmentMethod: order.fulfilmentMethod ?? "delivery",
+          deliveryLabel: order.deliveryLabel,
+          deliveryMinor: order.deliveryMinor,
           totalMinor: order.totalMinor,
           currency: order.currency,
           items: order.items.map(({ sku, house, name, sizeMl, quantity, unitPriceMinor, lineTotalMinor }) => ({
@@ -174,13 +175,11 @@ export function publicRoutes(deps: Deps) {
       store.db.collection(COLLECTIONS.content).where("publicFiles", "array-contains", file).limit(1).get(),
     ]);
     if (products.empty && content.empty) throw notFound("Image");
-    const data = await readImageFile(store.bucket, file);
-    if (!data) throw notFound("Image");
-    return c.body(new Uint8Array(data), 200, {
-      "Content-Type": MEDIA_TYPES[file.split(".").pop()!] ?? "application/octet-stream",
-      "Cache-Control": "public, max-age=3600, s-maxage=3600",
+    const response = await mediaResponse(store.bucket, file, c.req.header("range"), "public, max-age=3600, s-maxage=3600", {
       "Cross-Origin-Resource-Policy": "cross-origin",
     });
+    if (!response) throw notFound("Image");
+    return response;
   });
 
   return app;

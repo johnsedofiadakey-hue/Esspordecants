@@ -15,7 +15,7 @@ export function OrderList() {
     <>
       <PageHeader title="Orders" subtitle="Server-priced orders. Payment collection is not configured yet." />
       <div className="filters">
-        <Input type="search" placeholder="Order number, name or email" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search orders" />
+        <Input type="search" placeholder="Order number, name, phone or email" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search orders" />
         <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by status">
           <option value="">All statuses</option>
           {(data?.statuses ?? []).map((value) => (
@@ -50,7 +50,7 @@ export function OrderList() {
                   </td>
                   <td>
                     {order.customerName}
-                    <div className="muted small">{order.customerEmail}</div>
+                    <div className="muted small">{order.customerEmail || "Phone order"}</div>
                   </td>
                   <td>
                     <Badge value={order.status} />
@@ -232,12 +232,21 @@ export function OrderDetail({ id }: { id: string }) {
             <p>
               <strong>{order.customerName}</strong>
               <br />
-              {order.customerEmail}
-              <br />
-              {order.customerPhone}
+              {order.customerEmail ? (
+                <>
+                  {order.customerEmail}
+                  <br />
+                </>
+              ) : null}
+              <a href={`tel:${order.customerPhone.replace(/[^0-9+]/g, "")}`}>{order.customerPhone}</a>
+            </p>
+            <p>
+              <Badge value={order.fulfilmentMethod} label={order.fulfilmentMethod === "pickup" ? "Pickup" : "Delivery"} />
             </p>
             <p className="muted">
-              {[address.line1, address.line2, address.city, address.region].filter(Boolean).join(", ")}
+              {order.fulfilmentMethod === "pickup"
+                ? "Customer collects. No address."
+                : [address.line1, address.line2, address.city, address.region].filter(Boolean).join(", ") || "No address recorded."}
               {address.notes ? (
                 <>
                   <br />

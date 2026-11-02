@@ -21,6 +21,7 @@ const deliveryFields = z.object({
   label: shortText(80).min(2),
   description: longText(500),
   priceMinor: z.number().int().min(0).max(10_000_000),
+  method: z.enum(["delivery", "pickup"]),
   active: z.boolean(),
   sortOrder: z.number().int().min(0).max(1000),
 });
@@ -31,6 +32,7 @@ const toDelivery = (id: string, doc: DeliveryDoc) => ({
   label: doc.label,
   description: doc.description,
   priceMinor: doc.priceMinor,
+  method: doc.method ?? "delivery",
   active: doc.active,
   sortOrder: doc.sortOrder,
 });
@@ -87,7 +89,7 @@ export function settingsRoutes(deps: Deps) {
   });
 
   app.post("/delivery-options", requireOwner(), async (c) => {
-    const input = await readJson(c, deliveryFields.partial({ description: true, active: true, sortOrder: true }));
+    const input = await readJson(c, deliveryFields.partial({ description: true, method: true, active: true, sortOrder: true }));
     // The code is the document id, which makes it unique.
     const ref = delivery.doc(input.code);
     const doc: DeliveryDoc = {
@@ -95,6 +97,7 @@ export function settingsRoutes(deps: Deps) {
       label: input.label,
       description: input.description ?? "",
       priceMinor: input.priceMinor,
+      method: input.method ?? "delivery",
       active: input.active ?? false,
       sortOrder: input.sortOrder ?? 0,
       createdAt: now(),

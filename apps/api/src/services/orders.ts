@@ -4,7 +4,7 @@ import { ApiError, notFound } from "../lib/errors.ts";
 import { newId, now } from "../lib/util.ts";
 import type { PaymentAdapter } from "./payments.ts";
 import { finalize, type Product, type ProductDoc } from "./products.ts";
-import { activeDeliveryOptions, mergeLines, priceQuote, productsForVariants, type QuoteInput } from "./quote.ts";
+import { activeDeliveryOptions, mergeLines, priceQuote, productsForVariants, type FulfilmentMethod, type QuoteInput } from "./quote.ts";
 
 export const ORDER_STATUSES = [
   "pending_payment",
@@ -30,12 +30,15 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 // Stock goes back on the shelf only if the goods never left.
 const RESTOCK_FROM: ReadonlySet<OrderStatus> = new Set(["pending_payment", "paid", "processing"]);
 
+// All a buyer gives us: who they are, how to reach them, and (for delivery) where.
 export type Customer = {
   name: string;
-  email: string;
   phone: string;
-  address: { line1: string; line2?: string | undefined; city: string; region: string; notes?: string | undefined };
+  address?: string | undefined;
 };
+
+// Older orders kept a structured address and an email; newer ones keep only line1.
+export type DeliveryAddress = { line1?: string; line2?: string; city?: string; region?: string; notes?: string };
 
 export type OrderItem = {
   id: string;
@@ -70,7 +73,8 @@ export type OrderDoc = {
   customerName: string;
   customerEmail: string;
   customerPhone: string;
-  deliveryAddress: Customer["address"] | Record<string, never>;
+  fulfilmentMethod?: FulfilmentMethod;
+  deliveryAddress: DeliveryAddress;
   deliveryOptionCode: string | null;
   deliveryLabel: string;
   subtotalMinor: number;
@@ -151,6 +155,11 @@ export async function placeOrder(store: Store, payments: PaymentAdapter, input: 
       throw new ApiError(422, "delivery_required", "Choose a delivery option.", { quote });
     }
     const option = quote.deliveryOptions.find((entry) => entry.code === quote.selectedDeliveryOptionCode);
+    const method: FulfilmentMethod = option?.method ?? "delivery";
+    const address = input.customer.address?.trim() ?? "";
+    if (method === "delivery" && address.length < 5) {
+      throw new ApiError(422, "address_required", "Add your delivery address.", { field: "address" });
+    }
     const payment = payments.initiate({ id, number: counter.number, totalMinor: quote.totalMinor, currency: quote.currency });
 
     const touched = new Map<string, Product>();
@@ -176,9 +185,10 @@ export async function placeOrder(store: Store, payments: PaymentAdapter, input: 
       paymentProvider: payment.provider,
       paymentReference: payment.reference,
       customerName: input.customer.name,
-      customerEmail: input.customer.email.toLowerCase(),
+      customerEmail: "",
       customerPhone: input.customer.phone,
-      deliveryAddress: input.customer.address,
+      fulfilmentMethod: method,
+      deliveryAddress: method === "delivery" ? { line1: address } : {},
       deliveryOptionCode: option?.code ?? null,
       deliveryLabel: option?.label ?? "",
       subtotalMinor: quote.subtotalMinor,
@@ -274,6 +284,7 @@ export function orderDetail(order: OrderDoc & { id: string }) {
     paymentProvider: order.paymentProvider,
     paymentReference: order.paymentReference,
     customerPhone: order.customerPhone,
+    fulfilmentMethod: order.fulfilmentMethod ?? "delivery",
     deliveryAddress: order.deliveryAddress,
     deliveryOptionCode: order.deliveryOptionCode,
     deliveryLabel: order.deliveryLabel,

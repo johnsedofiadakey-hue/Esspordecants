@@ -2,7 +2,7 @@ import type { Transaction } from "firebase-admin/firestore";
 import { COLLECTIONS, type Store } from "../firebase.ts";
 import { ApiError, conflict, notFound } from "../lib/errors.ts";
 import { now } from "../lib/util.ts";
-import { approvalProblems, sortImages, type ImageRec, type ImageRole } from "./images.ts";
+import { approvalProblems, mediaKind, sortImages, type ImageRec, type ImageRole, type MediaKind } from "./images.ts";
 
 export type ProductStatus = "draft" | "published" | "archived";
 
@@ -142,7 +142,7 @@ export function publishReadiness(product: ProductDoc): ReadinessCheck[] {
     },
     {
       code: "decant_photo",
-      ok: approved.some((image) => image.role === "decant-front" && image.isRealPhoto && approvalProblems(image).length === 0),
+      ok: approved.some((image) => mediaKind(image) === "image" && image.role === "decant-front" && image.isRealPhoto && approvalProblems(image).length === 0),
       message: "At least one approved, real decant-front photo.",
     },
     {
@@ -160,7 +160,7 @@ export function publishReadiness(product: ProductDoc): ReadinessCheck[] {
       ok: activeVariants.every((variant) => {
         if (!variant.bottleDiffers) return true;
         const image = variant.imageId ? imageById.get(variant.imageId) : undefined;
-        return Boolean(image?.approved && image.isRealPhoto);
+        return Boolean(image?.approved && image.isRealPhoto && mediaKind(image) === "image");
       }),
       message: "Variants whose bottle looks different have their own approved photo.",
     },
@@ -254,6 +254,7 @@ export function adminImage(image: ImageRec, productId: string | null) {
   return {
     id: image.id,
     productId,
+    kind: mediaKind(image),
     role: image.role,
     alt: image.alt,
     url: `/api/admin/media/${image.fileName}`,
@@ -275,7 +276,7 @@ export function adminVariant(variant: VariantRec, productId: string) {
 }
 
 export function adminProductSummary(product: Product) {
-  const hero = sortImages(product.images)[0];
+  const hero = sortImages(product.images).find((image) => mediaKind(image) === "image");
   return {
     id: product.id,
     slug: product.slug,
@@ -324,10 +325,10 @@ export function adminProduct(product: Product) {
 
 // ---------- Public serialization (published only) ----------
 
-export type PublicImage = { url: string; alt: string; role: ImageRole; caption?: string };
+export type PublicImage = { url: string; alt: string; role: ImageRole; kind: MediaKind; mime: string; caption?: string };
 
 function publicImage(baseUrl: string, image: ImageRec): PublicImage {
-  const out: PublicImage = { url: `${baseUrl}/media/${image.fileName}`, alt: image.alt, role: image.role };
+  const out: PublicImage = { url: `${baseUrl}/media/${image.fileName}`, alt: image.alt, role: image.role, kind: mediaKind(image), mime: image.mime };
   if (image.role === "source-bottle") out.caption = "Original full-size bottle, shown for reference. You receive an Esspor decant.";
   return out;
 }
@@ -337,7 +338,8 @@ const sellable = (product: ProductDoc) => product.variants.filter((variant) => v
 export function publicSummary(baseUrl: string, product: Product) {
   const images = sortImages(product.images).filter((image) => image.approved);
   const variants = sellable(product);
-  const hero = images.find((image) => image.role === "decant-front") ?? images[0]!;
+  const photos = images.filter((image) => mediaKind(image) === "image");
+  const hero = photos.find((image) => image.role === "decant-front") ?? photos[0]!;
   return {
     id: product.id,
     slug: product.slug,
@@ -356,7 +358,7 @@ export function publicSummary(baseUrl: string, product: Product) {
 
 export function publicDetail(baseUrl: string, product: Product) {
   const images = sortImages(product.images).filter((image) => image.approved);
-  const imageMap = new Map(images.map((image) => [image.id, image]));
+  const imageMap = new Map(images.filter((image) => mediaKind(image) === "image").map((image) => [image.id, image]));
   return {
     ...publicSummary(baseUrl, product),
     description: product.description,

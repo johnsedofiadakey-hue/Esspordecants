@@ -6,10 +6,15 @@ export type ImageRole =
   | "packaging"
   | "editorial";
 
+export type MediaKind = "image" | "video";
+
 export type ProductImage = {
   url: string;
   alt: string;
   role: ImageRole;
+  /** Photo or short video. Older responses omit it; treat a missing value as a photo. */
+  kind?: MediaKind;
+  mime?: string;
   /** Present on source-bottle images: explains that the buyer receives a decant. */
   caption?: string;
 };
@@ -135,12 +140,22 @@ export type QuoteError = {
   availableQuantity?: number;
 };
 
+export type FulfilmentMethod = "delivery" | "pickup";
+
+export type DeliveryOption = {
+  code: string;
+  label: string;
+  description: string;
+  priceMinor: number;
+  method: FulfilmentMethod;
+};
+
 export type Quote = {
   currency: "GHS";
   items: QuoteLine[];
   errors: QuoteError[];
   subtotalMinor: number;
-  deliveryOptions: { code: string; label: string; description: string; priceMinor: number }[];
+  deliveryOptions: DeliveryOption[];
   selectedDeliveryOptionCode: string | null;
   deliveryMinor: number;
   totalMinor: number;
@@ -160,6 +175,53 @@ export async function getQuote(
   });
   if (!response.ok) throw new Error("Prices could not be confirmed right now.");
   return response.json() as Promise<Quote>;
+}
+
+export type PlacedOrder = {
+  order: {
+    number: string;
+    status: string;
+    fulfilmentMethod: FulfilmentMethod;
+    deliveryLabel: string;
+    deliveryMinor: number;
+    totalMinor: number;
+    currency: "GHS";
+    items: { sku: string; house: string; name: string; sizeMl: number; quantity: number; unitPriceMinor: number; lineTotalMinor: number }[];
+  };
+  payment: { provider: string; status: string; reference: string | null; message: string };
+};
+
+export class OrderError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// Checkout asks for a name and phone number, plus an address when the order is delivered.
+export async function placeOrder(input: {
+  items: { variantId: string; quantity: number }[];
+  deliveryOptionCode?: string | undefined;
+  customer: { name: string; phone: string; address?: string | undefined };
+}): Promise<PlacedOrder> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/v1/orders`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+  } catch {
+    throw new OrderError("network", "We couldn't reach Esspor. Check your connection and try again.");
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = data?.error ?? {};
+    const first = Array.isArray(error.details) ? error.details[0]?.message : "";
+    throw new OrderError(error.code ?? "error", first || error.message || "Your order could not be placed. Please try again.");
+  }
+  return data as PlacedOrder;
 }
 
 export function formatMoney(minor: number): string {

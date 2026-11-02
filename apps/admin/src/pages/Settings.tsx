@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { api, formatDate, formatMoney, toCedis, toMinor, type DeliveryOption, type TeamMember, type User } from "../api.ts";
+import { api, formatDate, formatMoney, humanize, toCedis, toMinor, type DeliveryOption, type TeamMember, type User } from "../api.ts";
 import { authErrorText, changePassword } from "../auth.ts";
 import { Badge, Button, Card, Checkbox, Field, Input, Loading, Notice, PageHeader, Select, useLoad, useToast } from "../components/ui.tsx";
 
@@ -192,15 +192,17 @@ function Delivery({ owner }: { owner: boolean }) {
   const [code, setCode] = useState("");
   const [label, setLabel] = useState("");
   const [price, setPrice] = useState("");
+  const [method, setMethod] = useState<DeliveryOption["method"]>("delivery");
   const toast = useToast();
 
   async function add(event: FormEvent) {
     event.preventDefault();
     try {
-      await api("POST", "/delivery-options", { code, label, priceMinor: toMinor(price), active: false });
+      await api("POST", "/delivery-options", { code, label, priceMinor: toMinor(price), method, active: false });
       setCode("");
       setLabel("");
       setPrice("");
+      setMethod("delivery");
       reload();
     } catch (err) {
       toast.error(err);
@@ -228,7 +230,7 @@ function Delivery({ owner }: { owner: boolean }) {
 
   return (
     <Card title="Delivery options">
-      <Notice tone="warn">The delivery policy is not confirmed. Only activate options that reflect the agreed rules; active options are returned in checkout quotes.</Notice>
+      <Notice tone="warn">The delivery policy is not confirmed. Only activate options that reflect the agreed rules; active options are returned in checkout quotes. Customers choose between these at checkout: “Pickup” options need no address, “Delivery” options ask for one.</Notice>
       {!data ? (
         <Loading error={error} />
       ) : (
@@ -237,6 +239,7 @@ function Delivery({ owner }: { owner: boolean }) {
             <thead>
               <tr>
                 <th>Option</th>
+                <th>Type</th>
                 <th>Price</th>
                 <th>Active</th>
                 <th />
@@ -248,6 +251,16 @@ function Delivery({ owner }: { owner: boolean }) {
                   <td>
                     <strong>{option.label}</strong>
                     <div className="mono small muted">{option.code}</div>
+                  </td>
+                  <td>
+                    {owner ? (
+                      <Select value={option.method} aria-label="Type" onChange={(e) => patch(option, { method: e.target.value as DeliveryOption["method"] })}>
+                        <option value="delivery">Delivery</option>
+                        <option value="pickup">Pickup</option>
+                      </Select>
+                    ) : (
+                      humanize(option.method)
+                    )}
                   </td>
                   <td>
                     {owner ? (
@@ -284,6 +297,12 @@ function Delivery({ owner }: { owner: boolean }) {
           </Field>
           <Field label="Label">
             <Input value={label} onChange={(e) => setLabel(e.target.value)} required />
+          </Field>
+          <Field label="Type">
+            <Select value={method} onChange={(e) => setMethod(e.target.value as DeliveryOption["method"])}>
+              <option value="delivery">Delivery (asks for an address)</option>
+              <option value="pickup">Pickup (no address)</option>
+            </Select>
           </Field>
           <Field label="Price (GHS)">
             <Input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} required />

@@ -120,7 +120,7 @@ Request: `{ "items": [{ "variantId", "quantity" }], "deliveryOptionCode"?: strin
   ],
   "errors": [{ "variantId": "...", "code": "insufficient_stock", "message": "Only 3 available.", "availableQuantity": 3 }],
   "subtotalMinor": 24000,
-  "deliveryOptions": [{ "code": "accra-courier", "label": "...", "description": "...", "priceMinor": 2500 }],
+  "deliveryOptions": [{ "code": "accra-courier", "label": "...", "description": "...", "priceMinor": 2500, "method": "delivery" }, { "code": "pickup", "label": "...", "description": "...", "priceMinor": 0, "method": "pickup" }],
   "selectedDeliveryOptionCode": null,
   "deliveryMinor": 0,
   "totalMinor": 24000,
@@ -135,9 +135,9 @@ Error codes: `variant_unavailable` (unknown, unpublished or inactive — remove 
 
 Returns `503 checkout_unavailable` until the server runs with `CHECKOUT_ENABLED=true`, which must wait for a confirmed payment provider and delivery policy. Shape, for planning only:
 
-Request: quote request plus `customer: { name, email, phone, address: { line1, line2?, city, region, notes? } }`.
-Response `201`: `{ "order": { "number", "status": "pending_payment", "totalMinor", "currency", "items": [...] }, "payment": { "provider": "none", "status": "not_configured", "reference": null, "message": "..." } }`.
-Failures: `409 quote_changed` (with `details.quote` — re-show the bag), `422 delivery_required`, `422 empty_order`. The payment block will change once a provider is chosen.
+Request (draft 4): quote request plus `customer: { name, phone, address? }`. Only a full name and a phone number are asked for; `address` is a single free-text string and is required only when the chosen delivery option has `method: "delivery"`. There is no email field.
+Response `201`: `{ "order": { "number", "status": "pending_payment", "fulfilmentMethod", "deliveryLabel", "deliveryMinor", "totalMinor", "currency", "items": [...] }, "payment": { "provider": "none", "status": "not_configured", "reference": null, "message": "..." } }`.
+Failures: `409 quote_changed` (with `details.quote` — re-show the bag), `422 delivery_required`, `422 address_required` (delivery chosen, address missing or too short), `422 empty_order`, `400 invalid_request` (`details[0].message` is shown as-is, e.g. a phone number that is not plausible). The payment block will change once a provider is chosen.
 
 ## Deployment (draft 3, 2026-10-29): Firebase
 
@@ -170,3 +170,17 @@ The draft 2 proposals (`caption`, `/families`, `/content`) are now used by the s
   - The content swaps in inside the existing `data-reveal` elements, so the motion is unaffected.
 - **Not rendered yet**: `home-feature` and `announcement`. Codex, these need a visual treatment from you. Data is available from `GET /api/v1/content?placement=...`.
 - **CSS added**: one rule at the end of `styles.css`, `button.text-link`, so bag actions look like the existing text links. Restyle it as you see fit.
+
+## Media and checkout fields (draft 4, 2026-11-02, Claude, per the merchant's requests)
+
+Additive except where marked. The storefront is updated to match (gallery, `/bag`).
+
+- **Photos and videos.** A product can carry any number of approved photos and short videos.
+  - Each `images[]` entry gains `kind: "image" | "video"` and `mime`. A missing `kind` means a photo.
+  - Ordering is by role (as before), then photos before videos, then the admin's order. `images[0]` and `heroImage` are always photos, and variant `image` is always a photo.
+  - Videos are MP4, MOV or WebM, up to 25 MB. Photos stay JPEG, PNG or WebP, up to 8 MB. File type is checked from the file's bytes, not its name.
+  - `GET /media/<file>` supports `Range` requests (`206 Partial Content`), which video seeking and Safari need. Videos have no poster frame; the storefront uses the first frame (`#t=0.1`).
+  - Videos must be approved and carry a description (`alt`) like photos, and physical roles need the "real footage" confirmation.
+- **Fulfilment.** Each delivery option has `method: "delivery" | "pickup"` (old options count as `delivery`). Customers pick one option at checkout; a `pickup` option needs no address.
+- **Order request**: see `POST /api/v1/orders` above. **Changed**: `customer.email` and the structured `customer.address` object are gone. Orders now keep `fulfilmentMethod`, the phone number and the single-line address; `customerEmail` is empty on new orders.
+- **Storefront**: `/bag` is now bag and checkout on one page: items, pickup or delivery, full name, phone, address (delivery only), place order, then a confirmation with the order number. The button stays disabled while `checkoutAvailable` is false.

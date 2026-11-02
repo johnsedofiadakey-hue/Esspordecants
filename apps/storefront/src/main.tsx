@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createRoot } from "react-dom/client";
 import {
   addToBag,
+  clearBag,
   readBag,
   setBagQuantity,
   subscribeBag,
@@ -14,8 +15,12 @@ import {
   listContent,
   listFamilies,
   listProducts,
+  OrderError,
+  placeOrder,
   type ContentEntry,
+  type PlacedOrder,
   type Product,
+  type ProductImage,
   type ProductSummary,
   type Quote,
 } from "./api";
@@ -527,6 +532,8 @@ function Shop() {
   );
 }
 
+const isVideo = (image?: ProductImage) => image?.kind === "video";
+
 function ProductPage({
   slug,
   preview = false,
@@ -621,19 +628,30 @@ function ProductPage({
             <div className="product-layout">
               <div className="product-gallery">
                 <div className="product-main-image">
-                  <img
-                    key={`${selectedImage}-${selectedVariant}`}
-                    src={
-                      (selectedImage === 0 && variant?.image?.url) ||
-                      images[selectedImage]?.url ||
-                      product.heroImage.url
-                    }
-                    alt={
-                      (selectedImage === 0 && variant?.image?.alt) ||
-                      images[selectedImage]?.alt ||
-                      product.heroImage.alt
-                    }
-                  />
+                  {isVideo(images[selectedImage]) ? (
+                    <video
+                      key={images[selectedImage]?.url}
+                      src={images[selectedImage]?.url}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      aria-label={images[selectedImage]?.alt || "Product video"}
+                    />
+                  ) : (
+                    <img
+                      key={`${selectedImage}-${selectedVariant}`}
+                      src={
+                        (selectedImage === 0 && variant?.image?.url) ||
+                        images[selectedImage]?.url ||
+                        product.heroImage.url
+                      }
+                      alt={
+                        (selectedImage === 0 && variant?.image?.alt) ||
+                        images[selectedImage]?.alt ||
+                        product.heroImage.alt
+                      }
+                    />
+                  )}
                   <span className="image-role">
                     {images[selectedImage]?.role === "source-bottle"
                       ? "Original source bottle"
@@ -642,6 +660,7 @@ function ProductPage({
                           ? "Editorial concept"
                           : "Editorial"
                         : "Esspor decant"}
+                    {isVideo(images[selectedImage]) ? " · video" : ""}
                   </span>
                 </div>
                 {images[selectedImage]?.role === "source-bottle" ? (
@@ -656,10 +675,19 @@ function ProductPage({
                       key={`${image.url}-${index}`}
                       className={selectedImage === index ? "selected" : ""}
                       onClick={() => setSelectedImage(index)}
-                      aria-label={`View ${image.role.replace("-", " ")} image`}
+                      aria-label={`View ${image.role.replace("-", " ")} ${isVideo(image) ? "video" : "image"}`}
                       aria-pressed={selectedImage === index}
                     >
-                      <img src={image.url} alt="" />
+                      {isVideo(image) ? (
+                        <>
+                          <video src={`${image.url}#t=0.1`} muted playsInline preload="metadata" tabIndex={-1} />
+                          <span className="play-badge" aria-hidden="true">
+                            ▶
+                          </span>
+                        </>
+                      ) : (
+                        <img src={image.url} alt="" />
+                      )}
                     </button>
                   ))}
                 </div>
@@ -745,7 +773,7 @@ function ProductPage({
                   </div>
                   {added && (
                     <p className="added-message" role="status">
-                      Added to your bag. <a href="/bag">View bag →</a>
+                      Added to your bag. <a href="/bag">Check out →</a>
                     </p>
                   )}
                 </div>
@@ -795,9 +823,10 @@ function ProductPage({
   );
 }
 
-// Re-quotes whenever the bag changes. The saved bag only holds ids, quantities and
-// display details; every price and availability shown here comes from the server.
-function useQuote(items: BagItem[]) {
+// Re-quotes whenever the bag or the chosen delivery option changes. The saved bag only
+// holds ids, quantities and display details; every price and availability shown here
+// comes from the server.
+function useQuote(items: BagItem[], deliveryOptionCode: string) {
   const [state, setState] = useState<{ quote: Quote | null; failed: boolean; loading: boolean }>({
     quote: null,
     failed: false,
@@ -812,7 +841,7 @@ function useQuote(items: BagItem[]) {
     }
     let active = true;
     setState((current) => ({ ...current, loading: true }));
-    getQuote(request)
+    getQuote(request, deliveryOptionCode || undefined)
       .then((quote) => {
         if (active) setState({ quote, failed: false, loading: false });
       })
@@ -822,15 +851,115 @@ function useQuote(items: BagItem[]) {
     return () => {
       active = false;
     };
-  }, [lines]);
+  }, [lines, deliveryOptionCode]);
   return state;
 }
 
+const PHONE_PATTERN = "\\+?[0-9][0-9 ()\\-]{6,}";
+
+// One page from bag to order: the items, then how to get them, then who and where.
+// Only a full name and phone number are asked for, plus an address for delivery.
 function Bag() {
   const items = useBag();
-  const { quote, failed, loading } = useQuote(items);
+  const [optionCode, setOptionCode] = useState("");
+  const { quote, failed, loading } = useQuote(items, optionCode);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [placed, setPlaced] = useState<PlacedOrder | null>(null);
   const lineFor = (variantId: string) => quote?.items.find((line) => line.variantId === variantId);
   const errorFor = (variantId: string) => quote?.errors.find((error) => error.variantId === variantId);
+
+  const options = quote?.deliveryOptions ?? [];
+  const optionKey = options.map((option) => option.code).join(",");
+  useEffect(() => {
+    // Start on the first option so the total always includes how it will arrive.
+    if (options.length && !options.some((option) => option.code === optionCode)) {
+      setOptionCode(options[0]!.code);
+    }
+  }, [optionKey]);
+  const selected = options.find((option) => option.code === optionCode);
+  const needsAddress = selected?.method !== "pickup";
+  const blocked = !quote || quote.errors.length > 0 || !quote.items.some((line) => line.available);
+  const canOrder = !!quote?.checkoutAvailable && !blocked && !submitting;
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!canOrder) return;
+    setSubmitting(true);
+    setProblem("");
+    try {
+      const result = await placeOrder({
+        items: items.map(({ variantId, quantity }) => ({ variantId, quantity })),
+        deliveryOptionCode: optionCode || undefined,
+        customer: { name, phone, address: needsAddress ? address : undefined },
+      });
+      clearBag();
+      setPlaced(result);
+      window.scrollTo({ top: 0 });
+    } catch (cause) {
+      setProblem(
+        cause instanceof OrderError
+          ? cause.code === "quote_changed"
+            ? "Something in your bag changed. Please review it and try again."
+            : cause.message
+          : "Your order could not be placed. Please try again.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (placed) {
+    const { order, payment } = placed;
+    return (
+      <>
+        <Header />
+        <main className="page-shell">
+          <div className="page-hero">
+            <p className="eyebrow">Order received</p>
+            <h1>Thank you.</h1>
+            <p>
+              Your order number is <strong>{order.number}</strong>.
+            </p>
+          </div>
+          <div className="order-done">
+            <ul>
+              {order.items.map((item) => (
+                <li key={item.sku}>
+                  <span>
+                    {item.quantity} × {item.name} · {item.sizeMl} ml decant
+                  </span>
+                  <strong>{formatMoney(item.lineTotalMinor)}</strong>
+                </li>
+              ))}
+              <li>
+                <span>{order.deliveryLabel || (order.fulfilmentMethod === "pickup" ? "Pickup" : "Delivery")}</span>
+                <strong>{order.deliveryMinor ? formatMoney(order.deliveryMinor) : "Free"}</strong>
+              </li>
+              <li className="order-done__total">
+                <span>Total</span>
+                <strong>{formatMoney(order.totalMinor)}</strong>
+              </li>
+            </ul>
+            <p>{payment.message}</p>
+            <p>
+              {order.fulfilmentMethod === "pickup"
+                ? "We’ll call you on the number you gave to arrange pickup."
+                : "We’ll call you on the number you gave to confirm delivery."}
+            </p>
+            <a href="/shop" className="button button--orange">
+              Keep exploring →
+            </a>
+          </div>
+        </main>
+        <Footer />
+      </>
+    );
+  }
+
   return (
     <>
       <Header />
@@ -905,21 +1034,98 @@ function Bag() {
               })}
             </div>
             <aside className="bag-summary">
-              <h2>Order summary</h2>
-              <p>
-                <span>Subtotal</span>
-                <strong>{quote ? formatMoney(quote.subtotalMinor) : loading ? "…" : "—"}</strong>
-              </p>
-              <small>
-                {failed
-                  ? "Prices and availability could not be confirmed right now. Please try again shortly."
-                  : quote && !quote.checkoutAvailable
-                    ? quote.checkoutMessage
-                    : "Prices and availability are confirmed by Esspor. Delivery is added at checkout."}
-              </small>
-              <button className="button button--orange" disabled>
-                Checkout being prepared
-              </button>
+              <h2>Checkout</h2>
+              <form className="checkout-form" onSubmit={submit}>
+                {options.length > 0 ? (
+                  <fieldset>
+                    <legend>How would you like it?</legend>
+                    {options.map((option) => (
+                      <label key={option.code} className={`choice ${option.code === optionCode ? "choice--on" : ""}`}>
+                        <input
+                          type="radio"
+                          name="fulfilment"
+                          value={option.code}
+                          checked={option.code === optionCode}
+                          onChange={() => setOptionCode(option.code)}
+                        />
+                        <span>
+                          <strong>{option.method === "pickup" ? `Pick up · ${option.label}` : option.label}</strong>
+                          {option.description ? <small>{option.description}</small> : null}
+                        </span>
+                        <em>{option.priceMinor ? formatMoney(option.priceMinor) : "Free"}</em>
+                      </label>
+                    ))}
+                  </fieldset>
+                ) : null}
+                <label className="field">
+                  Full name
+                  <input
+                    type="text"
+                    name="name"
+                    autoComplete="name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    minLength={2}
+                    required
+                  />
+                </label>
+                <label className="field">
+                  Phone number
+                  <input
+                    type="tel"
+                    name="phone"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    pattern={PHONE_PATTERN}
+                    title="Enter a phone number we can reach you on"
+                    required
+                  />
+                </label>
+                {needsAddress ? (
+                  <label className="field">
+                    Delivery address
+                    <textarea
+                      name="address"
+                      autoComplete="street-address"
+                      rows={3}
+                      placeholder="Street, area and a landmark"
+                      value={address}
+                      onChange={(event) => setAddress(event.target.value)}
+                      minLength={5}
+                      required
+                    />
+                  </label>
+                ) : null}
+                <div className="totals">
+                  <p>
+                    <span>Subtotal</span>
+                    <strong>{quote ? formatMoney(quote.subtotalMinor) : loading ? "…" : "—"}</strong>
+                  </p>
+                  {selected ? (
+                    <p>
+                      <span>{selected.method === "pickup" ? "Pickup" : "Delivery"}</span>
+                      <strong>{quote?.deliveryMinor ? formatMoney(quote.deliveryMinor) : "Free"}</strong>
+                    </p>
+                  ) : null}
+                  <p className="totals__sum">
+                    <span>Total</span>
+                    <strong>{quote ? formatMoney(quote.totalMinor) : loading ? "…" : "—"}</strong>
+                  </p>
+                </div>
+                <small role={problem ? "alert" : undefined}>
+                  {problem ||
+                    (failed
+                      ? "Prices and availability could not be confirmed right now. Please try again shortly."
+                      : quote && !quote.checkoutAvailable
+                        ? quote.checkoutMessage
+                        : "Prices and availability are confirmed by Esspor.")}
+                </small>
+                <button className="button button--orange" type="submit" disabled={!canOrder}>
+                  {submitting ? "Placing order…" : quote && !quote.checkoutAvailable ? "Checkout being prepared" : "Place order →"}
+                </button>
+              </form>
               <a href="/shop" className="text-link">
                 Continue exploring →
               </a>

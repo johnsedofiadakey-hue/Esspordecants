@@ -26,6 +26,7 @@ import {
   useLoad,
   useToast,
   AuthImage,
+  AuthVideo,
 } from "../components/ui.tsx";
 import { navigate } from "../router.ts";
 
@@ -352,44 +353,70 @@ export function ProductEditor({ id }: { id: string }) {
 
 // ---------- Images ----------
 
+const MAX_PHOTO_MB = 8;
+const MAX_VIDEO_MB = 25;
+
 function Images({ product, onChange }: { product: Product; onChange: () => Promise<void> }) {
   const [role, setRole] = useState<ImageRole>("decant-front");
-  const [alt, setAlt] = useState("");
   const [real, setReal] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const roleHint = IMAGE_ROLES.find((item) => item.value === role)?.hint;
 
+  // Several files can be chosen at once. They share the role and the real-photo
+  // confirmation; alt text is added per item afterwards, before approving it.
   async function upload(event: FormEvent) {
     event.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) return;
-    const form = new FormData();
-    form.set("file", file);
-    form.set("role", role);
-    form.set("alt", alt);
-    form.set("isRealPhoto", String(real));
-    setBusy(true);
-    try {
-      await api("POST", `/products/${product.id}/images`, form);
-      setAlt("");
-      setReal(false);
-      if (fileRef.current) fileRef.current.value = "";
-      await onChange();
-      toast.ok("Image uploaded. Review and approve it to make it public.");
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setBusy(false);
+    const files = Array.from(fileRef.current?.files ?? []);
+    if (!files.length) return;
+    setProgress({ done: 0, total: files.length });
+    const failed: string[] = [];
+    for (const [index, file] of files.entries()) {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("role", role);
+      form.set("alt", "");
+      form.set("isRealPhoto", String(real));
+      try {
+        await api("POST", `/products/${product.id}/images`, form);
+      } catch (err) {
+        failed.push(`${file.name}: ${err instanceof Error ? err.message : "upload failed"}`);
+      }
+      setProgress({ done: index + 1, total: files.length });
+    }
+    setProgress(null);
+    if (fileRef.current) fileRef.current.value = "";
+    await onChange();
+    if (failed.length) toast.error(new Error(failed.join(" ")));
+    if (failed.length < files.length) {
+      toast.ok(`${files.length - failed.length} uploaded. Add alt text, then approve each to make it public.`);
     }
   }
 
+  // Order is by role, photos before videos, then this list order; swap neighbours to reorder.
+  const ordered = product.images;
+  async function move(image: AdminImage, direction: -1 | 1) {
+    const index = ordered.findIndex((item) => item.id === image.id);
+    const other = ordered[index + direction];
+    if (!other || other.role !== image.role || other.kind !== image.kind) return;
+    try {
+      // The one that ends up first gets the lower number; distinct even if they were equal.
+      const [first, second] = direction === -1 ? [image, other] : [other, image];
+      const base = Math.min(image.sortOrder, other.sortOrder);
+      await api("PATCH", `/products/${product.id}/images/${first.id}`, { sortOrder: base });
+      await api("PATCH", `/products/${product.id}/images/${second.id}`, { sortOrder: base + 1 });
+    } catch (err) {
+      toast.error(err);
+    }
+    await onChange();
+  }
+
   return (
-    <Card title="Photos" actions={<span className="muted small">JPEG, PNG or WebP · min 400 × 400 · max 8 MB</span>}>
+    <Card title="Photos and videos" actions={<span className="muted small">Photos: JPEG, PNG or WebP, min 400 × 400, max {MAX_PHOTO_MB} MB · Videos: MP4, MOV or WebM, max {MAX_VIDEO_MB} MB</span>}>
       <Notice>
-        Upload real photographs of the Esspor decant. Concept renders and generated images must not be approved. The first public photo is the decant
-        front; source-bottle photos are labelled as the original bottle.
+        Upload real photographs and short videos of the Esspor decant. Concept renders and generated media must not be approved. The first public item is
+        always a decant-front photo; source-bottle media is labelled as the original bottle. Choose as many files as you like in one go.
       </Notice>
       <form className="upload" onSubmit={upload}>
         <Field label="Role" hint={roleHint}>
@@ -401,25 +428,30 @@ function Images({ product, onChange }: { product: Product; onChange: () => Promi
             ))}
           </Select>
         </Field>
-        <Field label="Alt text" hint="Describe what is visible, e.g. “Actual 5 ml Esspor decant, front view”.">
-          <Input value={alt} onChange={(e) => setAlt(e.target.value)} maxLength={250} />
-        </Field>
-        <Field label="File">
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" required className="file" />
+        <Field label="Files" hint="Photos and videos can be selected together.">
+          <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" required className="file" />
         </Field>
         <div className="upload-foot">
-          <Checkbox checked={real} onChange={setReal} label="This is a real photograph of the item, not a render or concept image" />
-          <Button type="submit" tone="primary" busy={busy}>
-            Upload
+          <Checkbox checked={real} onChange={setReal} label="These are real photographs or videos of the item, not renders or concept media" />
+          <Button type="submit" tone="primary" busy={progress !== null}>
+            {progress ? `Uploading ${progress.done}/${progress.total}…` : "Upload"}
           </Button>
         </div>
       </form>
       {product.images.length === 0 ? (
-        <p className="muted">No photos yet.</p>
+        <p className="muted">Nothing uploaded yet.</p>
       ) : (
         <div className="image-grid">
-          {product.images.map((image) => (
-            <ImageCard key={image.id} productId={product.id} image={image} onChange={onChange} />
+          {product.images.map((image, index) => (
+            <ImageCard
+              key={image.id}
+              productId={product.id}
+              image={image}
+              onChange={onChange}
+              onMove={(direction) => move(image, direction)}
+              canMoveUp={ordered[index - 1]?.role === image.role && ordered[index - 1]?.kind === image.kind}
+              canMoveDown={ordered[index + 1]?.role === image.role && ordered[index + 1]?.kind === image.kind}
+            />
           ))}
         </div>
       )}
@@ -427,9 +459,24 @@ function Images({ product, onChange }: { product: Product; onChange: () => Promi
   );
 }
 
-function ImageCard({ productId, image, onChange }: { productId: string; image: AdminImage; onChange: () => Promise<void> }) {
+function ImageCard({
+  productId,
+  image,
+  onChange,
+  onMove,
+  canMoveUp,
+  canMoveDown,
+}: {
+  productId: string;
+  image: AdminImage;
+  onChange: () => Promise<void>;
+  onMove: (direction: -1 | 1) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}) {
   const [alt, setAlt] = useState(image.alt);
   const toast = useToast();
+  const video = image.kind === "video";
   useEffect(() => setAlt(image.alt), [image.alt]);
 
   async function patch(body: Partial<Pick<AdminImage, "role" | "alt" | "isRealPhoto" | "approved">>) {
@@ -443,7 +490,7 @@ function ImageCard({ productId, image, onChange }: { productId: string; image: A
   }
 
   async function remove() {
-    if (!confirm("Delete this photo?")) return;
+    if (!confirm(video ? "Delete this video?" : "Delete this photo?")) return;
     try {
       await api("DELETE", `/products/${productId}/images/${image.id}`);
       await onChange();
@@ -455,11 +502,14 @@ function ImageCard({ productId, image, onChange }: { productId: string; image: A
   return (
     <figure className={`image-card ${image.approved ? "approved" : ""}`}>
       <div className="image-frame">
-        <AuthImage src={image.url} alt={image.alt} />
-        <span className="image-state">{image.approved ? "Public" : "Not approved"}</span>
+        {video ? <AuthVideo src={image.url} aria-label={image.alt || image.originalName} /> : <AuthImage src={image.url} alt={image.alt} />}
+        <span className="image-state">
+          {video ? "Video · " : ""}
+          {image.approved ? "Public" : "Not approved"}
+        </span>
       </div>
       <figcaption className="stack-sm">
-        <Select value={image.role} onChange={(e) => patch({ role: e.target.value as ImageRole })} aria-label="Image role">
+        <Select value={image.role} onChange={(e) => patch({ role: e.target.value as ImageRole })} aria-label="Role">
           {IMAGE_ROLES.map((item) => (
             <option key={item.value} value={item.value}>
               {item.label}
@@ -468,21 +518,30 @@ function ImageCard({ productId, image, onChange }: { productId: string; image: A
         </Select>
         <Input
           value={alt}
-          placeholder="Alt text"
-          aria-label="Alt text"
+          placeholder={video ? "Describe the video" : "Alt text"}
+          aria-label={video ? "Video description" : "Alt text"}
           onChange={(e) => setAlt(e.target.value)}
           onBlur={() => alt !== image.alt && patch({ alt })}
         />
-        <Checkbox checked={image.isRealPhoto} onChange={(value) => patch({ isRealPhoto: value })} label="Real photo" />
+        <Checkbox checked={image.isRealPhoto} onChange={(value) => patch({ isRealPhoto: value })} label={video ? "Real footage" : "Real photo"} />
         <Checkbox checked={image.approved} onChange={(value) => patch({ approved: value })} label="Approved for storefront" />
         {!image.approved && image.approvalProblems.length ? <p className="small warn-text">{image.approvalProblems.join(" ")}</p> : null}
         <div className="image-meta">
           <span className="muted small">
-            {image.width && image.height ? `${image.width}×${image.height}` : ""} · {(image.bytes / 1024).toFixed(0)} KB
+            {image.width && image.height ? `${image.width}×${image.height} · ` : ""}
+            {image.bytes >= 1024 * 1024 ? `${(image.bytes / 1024 / 1024).toFixed(1)} MB` : `${(image.bytes / 1024).toFixed(0)} KB`}
           </span>
-          <button type="button" className="link-button danger" onClick={remove}>
-            Delete
-          </button>
+          <span className="image-actions">
+            <button type="button" className="link-button" onClick={() => onMove(-1)} disabled={!canMoveUp} aria-label="Move earlier">
+              ←
+            </button>
+            <button type="button" className="link-button" onClick={() => onMove(1)} disabled={!canMoveDown} aria-label="Move later">
+              →
+            </button>
+            <button type="button" className="link-button danger" onClick={remove}>
+              Delete
+            </button>
+          </span>
         </div>
       </figcaption>
     </figure>
@@ -629,7 +688,7 @@ function VariantRow({ productId, variant, images, onChange }: { productId: strin
           <Select value={variant.imageId ?? ""} onChange={(e) => patch({ imageId: e.target.value || null })}>
             <option value="">Same as product</option>
             {images
-              .filter((image) => image.role !== "source-bottle" && image.role !== "editorial")
+              .filter((image) => image.kind === "image" && image.role !== "source-bottle" && image.role !== "editorial")
               .map((image) => (
                 <option key={image.id} value={image.id}>
                   {image.role} · {image.alt || image.originalName}

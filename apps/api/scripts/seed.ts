@@ -147,7 +147,10 @@ async function seedContentAndDelivery() {
   });
   // Inactive until the delivery policy is confirmed.
   batch.set(store.db.collection(COLLECTIONS.delivery).doc("example-courier"), {
-    code: "example-courier", label: "Example courier (unconfirmed)", description: "Placeholder until delivery rules are agreed.", priceMinor: 2500, active: false, sortOrder: 0, createdAt: timestamp, updatedAt: timestamp,
+    code: "example-courier", label: "Example courier (unconfirmed)", description: "Placeholder until delivery rules are agreed.", priceMinor: 2500, method: "delivery", active: false, sortOrder: 0, createdAt: timestamp, updatedAt: timestamp,
+  });
+  batch.set(store.db.collection(COLLECTIONS.delivery).doc("example-pickup"), {
+    code: "example-pickup", label: "Pick up (unconfirmed)", description: "Placeholder pickup point until the location is agreed.", priceMinor: 0, method: "pickup", active: false, sortOrder: 1, createdAt: timestamp, updatedAt: timestamp,
   });
   await batch.commit();
 }
@@ -160,6 +163,6 @@ if ((await marker.get()).exists) {
   await seedOrders(await seedSamples());
   await seedContentAndDelivery();
   await marker.set({ at: now() });
-  console.log("Seeded 3 synthetic draft products, 3 synthetic orders, 2 draft content entries, 1 inactive delivery option.");
+  console.log("Seeded 3 synthetic draft products, 3 synthetic orders, 2 draft content entries, 2 inactive fulfilment options (delivery and pickup).");
 }
 process.exit(0);

@@ -10,7 +10,10 @@ export type QuoteInput = {
   deliveryOptionCode?: string | undefined;
 };
 
-export type DeliveryOption = { code: string; label: string; description: string; priceMinor: number };
+// "pickup" options need no address; "delivery" options do.
+export type FulfilmentMethod = "delivery" | "pickup";
+
+export type DeliveryOption = { code: string; label: string; description: string; priceMinor: number; method: FulfilmentMethod };
 
 export type QuoteLine = {
   variantId: string;
@@ -41,7 +44,8 @@ export type Quote = {
   checkoutMessage: string;
 };
 
-export type DeliveryDoc = DeliveryOption & { active: boolean; sortOrder: number; createdAt: string; updatedAt: string };
+// `method` is missing on options saved before pickup existed; those are deliveries.
+export type DeliveryDoc = Omit<DeliveryOption, "method"> & { method?: FulfilmentMethod; active: boolean; sortOrder: number; createdAt: string; updatedAt: string };
 
 export async function activeDeliveryOptions(store: Store, tx?: Transaction): Promise<DeliveryOption[]> {
   const query = store.db.collection(COLLECTIONS.delivery).where("active", "==", true);
@@ -49,7 +53,7 @@ export async function activeDeliveryOptions(store: Store, tx?: Transaction): Pro
   return snapshot.docs
     .map((doc) => doc.data() as DeliveryDoc)
     .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
-    .map(({ code, label, description, priceMinor }) => ({ code, label, description, priceMinor }));
+    .map(({ code, label, description, priceMinor, method }) => ({ code, label, description, priceMinor, method: method ?? "delivery" }));
 }
 
 export function mergeLines(items: QuoteInput["items"]) {

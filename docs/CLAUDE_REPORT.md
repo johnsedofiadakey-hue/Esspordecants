@@ -190,3 +190,26 @@ Removed in this version: `auth/login`, `auth/logout` and `auth/password`. Fireba
 3. **Optional**: use `image.caption` on source-bottle images, `GET /api/v1/families` for filter chips, and `GET /api/v1/content?placement=...` for editorial copy.
 4. Do not build order placement yet.
 5. Pushing to `main` deploys both sites. See "Deployment (draft 3)" in `SHARED_CONTRACT.md`.
+
+## 9. Media uploads and one-page checkout (2026-11-02)
+
+Requested by the merchant: several images and videos per product, a short customer journey, and a checkout that asks only for a full name, a phone number and (for delivery) an address, with a choice of pickup or delivery.
+
+**Media**
+- `apps/api/src/services/images.ts`: videos (MP4, MOV, WebM) are accepted next to photos, detected by content. `kind` is stored per file; records without it are photos. Limits: photos 8 MB, videos 25 MB (`maxVideoBytes`).
+- Media is streamed with `Range` support (`mediaResponse`) on both `/media/:file` and the admin preview route.
+- Hero images, variant photos and the "real decant-front photo" publish gate only ever use photos. The editorial library still takes photos only.
+- Admin, **Photos and videos**: pick many files at once, with one shared role and real-media confirmation; add the description per item afterwards, then approve. Cards play videos and have earlier/later buttons for ordering within a role.
+- Storefront product page: thumbnails show a play badge for videos, and selecting one plays it in the main viewer.
+- **Open risk**: uploads and video playback go through the Cloud Function (32 MiB request limit) behind Firebase Hosting. This is why videos are capped at 25 MB. It was verified against the emulators and a local build only, not on the live site. Longer videos would need direct-to-storage signed uploads.
+
+**Checkout**
+- `/bag` is bag and checkout on one page. Fulfilment options come from Settings → Delivery options, which now have a type (Delivery or Pickup).
+- The order takes `customer: { name, phone, address? }`. Address is required only for delivery (`422 address_required`). The email field is gone; the admin shows the phone number as a tap-to-call link, and orders are searchable by phone.
+- Checkout still stays closed until `CHECKOUT_ENABLED=true`, a payment provider is chosen and delivery options are active.
+
+**Verification**
+- `npm test` in `apps/api` (JDK 21, `JAVA_HOME=/opt/homebrew/opt/openjdk@21`): 23 of 23 pass. New tests cover video upload and sniffing, photo-first ordering, range responses, size limits, library rejecting video, pickup and delivery orders, and `address_required`.
+- API typecheck, admin build and storefront build pass.
+- A headless Chrome run against the emulators and a local build covered: mixed gallery with video, add to bag, pickup then courier (fee added to the total), address field appearing only for delivery, browser-side validation blocking an empty form, order placed with a confirmation and an emptied bag, and no horizontal scroll at 390 px.
+- **Not checked by eye**: the admin screens (typecheck and build only) and a real, playable video. The local fixture's video bytes are not a real video.

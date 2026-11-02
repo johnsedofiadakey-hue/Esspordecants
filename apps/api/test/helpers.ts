@@ -98,6 +98,18 @@ export function imageForm(fields: Record<string, string>, data: Buffer = png(), 
   return form;
 }
 
+// Smallest byte strings that pass the content sniffing. They are not playable.
+export const mp4 = (extraBytes = 0) =>
+  Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from("ftypisom", "ascii"), Buffer.alloc(12 + extraBytes, 1)]);
+export const webm = () => Buffer.concat([Buffer.from([0x1a, 0x45, 0xdf, 0xa3]), Buffer.alloc(32, 2)]);
+
+export function mediaForm(fields: Record<string, string>, data: Buffer, name: string, type: string) {
+  const form = new FormData();
+  form.set("file", new File([new Uint8Array(data)], name, { type }));
+  for (const [key, value] of Object.entries(fields)) form.set(key, value);
+  return form;
+}
+
 export const completeProduct = {
   house: "Maison Verité",
   name: "Cèdre Lumière",

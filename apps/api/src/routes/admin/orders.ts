@@ -35,7 +35,7 @@ export function orderRoutes(deps: Deps) {
     const snapshot = await base.orderBy("createdAt", "desc").limit(q ? 1000 : 200).get();
     const items = snapshot.docs
       .map((doc) => ({ id: doc.id, ...(doc.data() as OrderDoc) }))
-      .filter((order) => !q || fold(`${order.number} ${order.customerName} ${order.customerEmail}`).includes(q))
+      .filter((order) => !q || fold(`${order.number} ${order.customerName} ${order.customerEmail} ${order.customerPhone}`).includes(q))
       .slice(0, 200);
     return c.json({ items: items.map(orderSummary), statuses: ORDER_STATUSES });
   });

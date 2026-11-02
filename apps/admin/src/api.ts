@@ -14,9 +14,13 @@ export type User = { id: string; email: string; name: string; role: "owner" | "e
 
 export type TeamMember = User & { disabled: boolean; createdAt: string; lastLoginAt: string | null };
 
+export type MediaKind = "image" | "video";
+
 export type AdminImage = {
   id: string;
   productId: string | null;
+  kind: MediaKind;
+  mime: string;
   role: ImageRole;
   alt: string;
   url: string;
@@ -102,6 +106,7 @@ export type OrderSummary = {
 export type Order = OrderSummary & {
   paymentProvider: string;
   customerPhone: string;
+  fulfilmentMethod: "delivery" | "pickup";
   deliveryAddress: { line1?: string; line2?: string; city?: string; region?: string; notes?: string };
   deliveryLabel: string;
   subtotalMinor: number;
@@ -134,6 +139,7 @@ export type DeliveryOption = {
   label: string;
   description: string;
   priceMinor: number;
+  method: "delivery" | "pickup";
   active: boolean;
   sortOrder: number;
 };

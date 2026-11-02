@@ -10,9 +10,9 @@ import {
   approvalProblems,
   deleteImageFile,
   IMAGE_ROLES,
+  mediaKind,
+  mediaResponse,
   MEDIA_FILE,
-  MEDIA_TYPES,
-  readImageFile,
   uploadImage,
   type ImageRec,
   type ImageRole,
@@ -122,9 +122,10 @@ function findImage(product: ProductDoc, imageId: string): ImageRec {
 }
 
 function assertVariantImage(product: ProductDoc, imageId: string | null | undefined) {
-  if (imageId && !product.images.some((image) => image.id === imageId)) {
-    throw badRequest("Variant image must belong to the same product.");
-  }
+  if (!imageId) return;
+  const image = product.images.find((entry) => entry.id === imageId);
+  if (!image) throw badRequest("Variant image must belong to the same product.");
+  if (mediaKind(image) !== "image") throw badRequest("Variant image must be a photo, not a video.");
 }
 
 // Variant and image ids are scoped to a product, so routes carry both ids.
@@ -133,11 +134,11 @@ async function readUpload(c: Context<AppEnv>, maxBytes: number) {
   try {
     body = await c.req.parseBody();
   } catch {
-    throw badRequest("Send the image as multipart/form-data.");
+    throw badRequest("Send the file as multipart/form-data.");
   }
   const file = body.file;
-  if (!(file instanceof File)) throw badRequest("Attach an image file in the “file” field.");
-  if (file.size > maxBytes) throw new ApiError(413, "file_too_large", `Images must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+  if (!(file instanceof File)) throw badRequest("Attach a file in the “file” field.");
+  if (file.size > maxBytes) throw new ApiError(413, "file_too_large", `Files must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
   const role = parse(z.enum(IMAGE_ROLES), body.role ?? "decant-front") as ImageRole;
   const alt = parse(shortText(250), body.alt ?? "");
   const isRealPhoto = body.isRealPhoto === "true";
@@ -327,9 +328,13 @@ export function productRoutes(deps: Deps) {
   app.post("/products/:id/images", async (c) => {
     const productId = c.req.param("id");
     const current = await getProduct(store, productId);
-    const upload = await readUpload(c, config.maxUploadBytes);
+    const upload = await readUpload(c, config.maxVideoBytes);
     const sortOrder = current.images.reduce((max, image) => Math.max(max, image.sortOrder + 1), 0);
-    const image = await uploadImage(store.bucket, upload, sortOrder);
+    const image = await uploadImage(store.bucket, upload, sortOrder, {
+      maxImageBytes: config.maxUploadBytes,
+      maxVideoBytes: config.maxVideoBytes,
+      allowVideo: true,
+    });
     try {
       await mutateProduct(store, productId, (product) => {
         product.images.push(image);
@@ -338,7 +343,7 @@ export function productRoutes(deps: Deps) {
       await deleteImageFile(store.bucket, image.fileName);
       throw error;
     }
-    await audit(store, c.get("user").id, "upload", "image", image.id, { productId, role: image.role });
+    await audit(store, c.get("user").id, "upload", mediaKind(image), image.id, { productId, role: image.role });
     return c.json(adminImage(image, productId), 201);
   });
 
@@ -385,7 +390,11 @@ export function productRoutes(deps: Deps) {
 
   app.post("/images", async (c) => {
     const upload = await readUpload(c, config.maxUploadBytes);
-    const image = await uploadImage(store.bucket, { ...upload, role: "editorial" }, 0);
+    const image = await uploadImage(store.bucket, { ...upload, role: "editorial" }, 0, {
+      maxImageBytes: config.maxUploadBytes,
+      maxVideoBytes: config.maxVideoBytes,
+      allowVideo: false,
+    });
     await library.doc(image.id).set(image);
     await audit(store, c.get("user").id, "upload", "image", image.id, { role: "editorial" });
     return c.json(adminImage(image, null), 201);
@@ -432,12 +441,9 @@ export function productRoutes(deps: Deps) {
   app.get("/media/:file", async (c) => {
     const file = c.req.param("file");
     if (!MEDIA_FILE.test(file)) throw notFound("Image");
-    const data = await readImageFile(store.bucket, file);
-    if (!data) throw notFound("Image");
-    return c.body(new Uint8Array(data), 200, {
-      "Content-Type": MEDIA_TYPES[file.split(".").pop()!] ?? "application/octet-stream",
-      "Cache-Control": "private, max-age=300",
-    });
+    const response = await mediaResponse(store.bucket, file, c.req.header("range"), "private, max-age=300");
+    if (!response) throw notFound("Image");
+    return response;
   });
 
   return app;

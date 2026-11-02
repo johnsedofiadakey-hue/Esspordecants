@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createApp } from "../src/app.ts";
-import { call, completeProduct, imageForm, login, png, setup, signIn } from "./helpers.ts";
+import { call, completeProduct, imageForm, login, mediaForm, mp4, png, setup, signIn, webm } from "./helpers.ts";
 
 describe("Esspor API", () => {
   let ctx: Awaited<ReturnType<typeof setup>>;
@@ -143,6 +143,78 @@ describe("Esspor API", () => {
     assert.equal((await admin("GET", `/media/${file}`)).status, 200);
   });
 
+  test("a product can carry several photos and videos, with the hero always a photo", async () => {
+    const extra = await admin("POST", `/products/${productId}/images`, { form: imageForm({ role: "decant-side", alt: "Side view of the decant", isRealPhoto: "true" }, png(500, 500)) });
+    assert.equal(extra.status, 201);
+    assert.equal(extra.data.kind, "image");
+
+    const bad = await admin("POST", `/products/${productId}/images`, { form: mediaForm({ role: "decant-front" }, Buffer.from("not a video at all, just text"), "clip.mp4", "video/mp4") });
+    assert.equal(bad.status, 415);
+
+    const clip = await admin("POST", `/products/${productId}/images`, {
+      form: mediaForm({ role: "decant-front", alt: "Actual Esspor decant being sprayed", isRealPhoto: "true" }, mp4(4096), "spray.mp4", "video/mp4"),
+    });
+    assert.equal(clip.status, 201, JSON.stringify(clip.data));
+    assert.equal(clip.data.kind, "video");
+    assert.equal(clip.data.mime, "video/mp4");
+    const webmClip = await admin("POST", `/products/${productId}/images`, {
+      form: mediaForm({ role: "packaging", alt: "Unboxing of the decant pack", isRealPhoto: "true" }, webm(), "unbox.webm", "video/webm"),
+    });
+    assert.equal(webmClip.data.mime, "video/webm");
+
+    // Videos cannot stand in for a variant's bottle photo.
+    const asVariantImage = await admin("PATCH", `/products/${productId}/variants/${variantId}`, { body: { imageId: clip.data.id } });
+    assert.equal(asVariantImage.status, 400);
+
+    // Not public until approved.
+    const file = clip.data.url.split("/").pop();
+    assert.equal((await call(ctx.app, "GET", `/media/${file}`)).status, 404);
+    const approved = await admin("PATCH", `/products/${productId}/images/${clip.data.id}`, { body: { approved: true } });
+    assert.equal(approved.status, 200);
+    await admin("PATCH", `/products/${productId}/images/${webmClip.data.id}`, { body: { approved: true } });
+    await admin("PATCH", `/products/${productId}/images/${extra.data.id}`, { body: { approved: true } });
+
+    const detail = await call(ctx.app, "GET", "/api/v1/products/maison-verite-cedre-lumiere");
+    const kinds = detail.data.images.map((image: { role: string; kind: string }) => `${image.role}:${image.kind}`);
+    assert.deepEqual(kinds, [
+      "decant-front:image",
+      "decant-front:video",
+      "decant-side:image",
+      "packaging:video",
+      "source-bottle:image",
+    ]);
+    assert.equal(detail.data.heroImage.kind, "image");
+    assert.equal(detail.data.images[1].mime, "video/mp4");
+
+    // Videos stream with byte ranges so browsers can seek.
+    const whole = await call(ctx.app, "GET", `/media/${file}`);
+    assert.equal(whole.status, 200);
+    assert.equal(whole.headers.get("content-type"), "video/mp4");
+    assert.equal(whole.headers.get("accept-ranges"), "bytes");
+    assert.equal(whole.data.byteLength, mp4(4096).length);
+    const part = await call(ctx.app, "GET", `/media/${file}`, { headers: { range: "bytes=0-9" } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get("content-range"), `bytes 0-9/${mp4(4096).length}`);
+    assert.equal(part.data.byteLength, 10);
+    const tail = await call(ctx.app, "GET", `/media/${file}`, { headers: { range: "bytes=-4" } });
+    assert.equal(tail.status, 206);
+    assert.equal(tail.data.byteLength, 4);
+    assert.equal((await call(ctx.app, "GET", `/media/${file}`, { headers: { range: "bytes=999999-" } })).status, 416);
+
+    // A photo is still needed to publish: with only videos approved, the gate would fail.
+    assert.equal((await admin("GET", `/products/${productId}`)).data.publishable, true);
+  });
+
+  test("videos are not accepted for the editorial library, and oversize ones are refused", async () => {
+    const library = await admin("POST", "/images", { form: mediaForm({ alt: "Mood clip" }, mp4(1024), "mood.mp4", "video/mp4") });
+    assert.equal(library.status, 415);
+    const small = createApp({ store: ctx.store, config: { ...ctx.config, maxVideoBytes: 2048 } });
+    const session = await login(small);
+    const big = await session.admin("POST", `/products/${productId}/images`, { form: mediaForm({ role: "editorial" }, mp4(4096), "big.mp4", "video/mp4") });
+    assert.equal(big.status, 413);
+    assert.equal(big.data.error.code, "file_too_large");
+  });
+
   test("quote uses server prices and stock", async () => {
     const res = await call(ctx.app, "POST", "/api/v1/checkout/quote", {
       body: { items: [{ variantId, quantity: 2 }, { variantId: "missing", quantity: 1 }] },
@@ -169,14 +241,39 @@ describe("Esspor API", () => {
     const enabled = createApp({ store: ctx.store, config: { ...ctx.config, checkoutEnabled: true } });
     const session = await login(enabled);
     await session.admin("POST", "/delivery-options", { body: { code: "test-courier", label: "Test courier", priceMinor: 2000, active: true } });
-    const customer = {
-      name: "Test Buyer",
-      email: "buyer@example.invalid",
-      phone: "+233000000000",
-      address: { line1: "1 Test Road", city: "Accra", region: "Greater Accra" },
-    };
+    await session.admin("POST", "/delivery-options", { body: { code: "test-pickup", label: "Pick up", priceMinor: 0, method: "pickup", active: true } });
+    const customer = { name: "Test Buyer", phone: "+233 24 000 0000", address: "1 Test Road, Osu, Accra" };
     const noDelivery = await call(enabled, "POST", "/api/v1/orders", { body: { items: [{ variantId, quantity: 1 }], customer } });
     assert.equal(noDelivery.status, 422);
+
+    const quoted = await call(enabled, "POST", "/api/v1/checkout/quote", { body: { items: [{ variantId, quantity: 1 }] } });
+    assert.deepEqual(
+      quoted.data.deliveryOptions.map((option: { code: string; method: string }) => [option.code, option.method]).sort(),
+      [["test-courier", "delivery"], ["test-pickup", "pickup"]],
+    );
+
+    // Delivery needs an address; only a name and phone are asked for besides that.
+    const noAddress = await call(enabled, "POST", "/api/v1/orders", {
+      body: { items: [{ variantId, quantity: 1 }], deliveryOptionCode: "test-courier", customer: { name: "Test Buyer", phone: customer.phone } },
+    });
+    assert.equal(noAddress.status, 422);
+    assert.equal(noAddress.data.error.code, "address_required");
+    const badPhone = await call(enabled, "POST", "/api/v1/orders", {
+      body: { items: [{ variantId, quantity: 1 }], deliveryOptionCode: "test-pickup", customer: { name: "Test Buyer", phone: "abc" } },
+    });
+    assert.equal(badPhone.status, 400);
+
+    const pickup = await call(enabled, "POST", "/api/v1/orders", {
+      body: { items: [{ variantId, quantity: 1 }], deliveryOptionCode: "test-pickup", customer: { name: "Pick Up Buyer", phone: customer.phone } },
+    });
+    assert.equal(pickup.status, 201, JSON.stringify(pickup.data));
+    assert.equal(pickup.data.order.fulfilmentMethod, "pickup");
+    assert.equal(pickup.data.order.totalMinor, 12000);
+    const pickupOrder = (await session.admin("GET", "/orders")).data.items.find((item: { customerName: string }) => item.customerName === "Pick Up Buyer");
+    const pickupDetail = await session.admin("GET", `/orders/${pickupOrder.id}`);
+    assert.equal(pickupDetail.data.fulfilmentMethod, "pickup");
+    assert.deepEqual(pickupDetail.data.deliveryAddress, {});
+    await session.admin("POST", `/orders/${pickupOrder.id}/status`, { body: { status: "cancelled", note: "Test pickup" } });
     const placed = await call(enabled, "POST", "/api/v1/orders", {
       body: { items: [{ variantId, quantity: 2 }], deliveryOptionCode: "test-courier", customer },
     });
@@ -187,7 +284,11 @@ describe("Esspor API", () => {
     assert.equal(variant.data.variants[0].stockQuantity, 1);
 
     const orders = await session.admin("GET", "/orders");
-    const orderId = orders.data.items[0].id;
+    const orderId = orders.data.items.find((item: { customerName: string }) => item.customerName === "Test Buyer").id;
+    const delivered = await session.admin("GET", `/orders/${orderId}`);
+    assert.equal(delivered.data.fulfilmentMethod, "delivery");
+    assert.equal(delivered.data.deliveryAddress.line1, "1 Test Road, Osu, Accra");
+    assert.equal((await session.admin("GET", "/orders?q=24%20000")).data.items.length, 2, "orders are searchable by phone");
     const invalid = await session.admin("POST", `/orders/${orderId}/status`, { body: { status: "shipped" } });
     assert.equal(invalid.status, 409);
     const cancelled = await session.admin("POST", `/orders/${orderId}/status`, { body: { status: "cancelled", note: "Test" } });

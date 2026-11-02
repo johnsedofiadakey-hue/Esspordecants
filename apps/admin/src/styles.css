@@ -884,11 +884,23 @@ a:focus-visible {
   background: var(--cream);
 }
 
-.image-frame img {
+.image-frame img,
+.image-frame video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.image-actions {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.image-actions .link-button:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 .image-state {

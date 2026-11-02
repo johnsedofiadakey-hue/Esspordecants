@@ -6,6 +6,7 @@ import {
   useState,
   type AnchorHTMLAttributes,
   type ImgHTMLAttributes,
+  type VideoHTMLAttributes,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -222,6 +223,29 @@ export function Notice({ tone = "info", children }: { tone?: "info" | "warn" | "
 }
 
 // ---------- Images ----------
+
+// Draft videos are private too, so they are fetched with the token and played from a
+// blob URL. Videos are capped at 25 MB, which keeps this practical.
+export function AuthVideo({ src, ...props }: VideoHTMLAttributes<HTMLVideoElement> & { src: string }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let revoked = false;
+    let url: string | null = null;
+    setObjectUrl(null);
+    fetchImage(src)
+      .then((value) => {
+        url = value;
+        if (revoked) URL.revokeObjectURL(value);
+        else setObjectUrl(value);
+      })
+      .catch(() => {});
+    return () => {
+      revoked = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [src]);
+  return objectUrl ? <video src={objectUrl} controls playsInline preload="metadata" {...props} /> : <span className={`${props.className ?? ""} image-loading`} aria-hidden="true" />;
+}
 
 export function AuthImage({ src, ...props }: ImgHTMLAttributes<HTMLImageElement> & { src: string }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
