@@ -341,7 +341,7 @@ function Home() {
                   <PlainText text={hero.body} />
                 ) : (
                   <>
-                    Authentic designer and niche scents,
+                    Authentic Arabian, designer and niche scents,
                     <br className="desktop-break" /> decanted for the joy of
                     discovery.
                   </>
@@ -1782,7 +1782,7 @@ function HowItWorks() {
           <article>
             <span>01</span>
             <h2>Find a fragrance</h2>
-            <p>Browse designer and niche scents by house, notes, or mood.</p>
+            <p>Browse Arabian, designer and niche scents by house, notes, or mood.</p>
           </article>
           <article>
             <span>02</span>
@@ -1823,7 +1823,7 @@ function About() {
         </div>
         <div className="about-panel">
           <p>
-            Esspor makes authentic designer and niche fragrances accessible
+            Esspor makes authentic Arabian, designer and niche fragrances accessible
             through high-quality decants. It helps you explore luxury fragrances
             without committing to expensive full-size bottles.
           </p>
