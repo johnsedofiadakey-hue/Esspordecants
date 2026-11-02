@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { authErrorText, signIn } from "../auth.ts";
 import { Button, Field, Input } from "../components/ui.tsx";
 
+const storefrontUrl = import.meta.env.VITE_STOREFRONT_URL ?? "https://esspordecants.web.app";
+
 // Signing in hands control back to App, which checks the account with the API.
 export function Login({ notice }: { notice?: string }) {
   const [email, setEmail] = useState("");
@@ -24,6 +26,9 @@ export function Login({ notice }: { notice?: string }) {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
+        <a className="back login-back" href={storefrontUrl}>
+          ← Back to the shop
+        </a>
         <img src="/esspor-coffee.svg" alt="Esspor" className="login-logo" />
         <h1>Sign in to Esspor Admin</h1>
         <p className="subtitle">Catalogue, orders and content.</p>
