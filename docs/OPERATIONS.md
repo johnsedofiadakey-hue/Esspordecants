@@ -62,6 +62,7 @@ Add the domain in Firebase Hosting (storefront site), follow its DNS steps, then
 |---|---|
 | `apps/api/.env.esspordecants` | `PUBLIC_BASE_URL`, `STOREFRONT_ORIGINS` (put the new domain first) |
 | `apps/storefront/index.html` | the absolute `og:image` address |
+| `apps/storefront/public/robots.txt` | the `Sitemap:` address |
 | `.github/workflows/deploy.yml` | `VITE_API_BASE_URL` |
 | Paystack | webhook URL |
 | Turnstile | allowed domain |

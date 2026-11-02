@@ -101,11 +101,5 @@ export function seoRoutes(deps: Deps) {
     });
   });
 
-  app.get("/robots.txt", (c) =>
-    c.text(`User-agent: *\nAllow: /\nDisallow: /bag\nDisallow: /track\nDisallow: /api/\nSitemap: ${config.siteUrl}/sitemap.xml\n`, 200, {
-      "Cache-Control": "public, max-age=300, s-maxage=3600",
-    }),
-  );
-
   return app;
 }

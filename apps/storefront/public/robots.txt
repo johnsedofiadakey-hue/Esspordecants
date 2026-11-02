@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /bag
+Disallow: /track
+Disallow: /api/
+Sitemap: https://esspordecants.web.app/sitemap.xml

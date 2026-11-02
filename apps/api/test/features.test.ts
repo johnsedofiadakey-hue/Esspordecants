@@ -192,7 +192,5 @@ describe("Store details, abuse guards, exports, import and link previews", () =>
 
     const sitemap = Buffer.from((await call(app, "GET", "/sitemap.xml")).data).toString("utf8");
     assert.ok(sitemap.includes(`https://shop.test/product/${slug}`) && sitemap.includes("https://shop.test/privacy"));
-    const robots = Buffer.from((await call(app, "GET", "/robots.txt")).data).toString("utf8");
-    assert.ok(robots.includes("Disallow: /track") && robots.includes("Sitemap: https://shop.test/sitemap.xml"));
   });
 });

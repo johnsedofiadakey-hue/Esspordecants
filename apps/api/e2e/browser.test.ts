@@ -250,7 +250,7 @@ describe("Storefront in a real browser", () => {
     const headersFor = JSON.parse(readFileSync(resolve(import.meta.dirname, "../../../firebase.json"), "utf8")).hosting.find((entry: { target: string }) => entry.target === "storefront").headers.find((entry: { source: string }) => entry.source === "**").headers as { key: string; value: string }[];
     site = createServer((req, res) => {
       const path = new URL(req.url ?? "/", ORIGIN).pathname;
-      if (/^\/(api|media|product)\//.test(path) || path === "/sitemap.xml" || path === "/robots.txt") return api(req, res);
+      if (/^\/(api|media|product)\//.test(path) || path === "/sitemap.xml") return api(req, res);
       let file = join(DIST, path);
       if (!existsSync(file) || statSync(file).isDirectory()) file = join(DIST, "index.html");
       res.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream", ...Object.fromEntries(headersFor.map((header) => [header.key, header.value])) });
@@ -368,8 +368,9 @@ describe("Storefront in a real browser", () => {
   });
 
   test("robots.txt and the sitemap point search engines at the right places", async () => {
+    // robots.txt is a plain static file: Google's function frontend swallows that path.
     const robots = await (await fetch(`${ORIGIN}/robots.txt`)).text();
-    assert.ok(robots.includes("Disallow: /track") && robots.includes(`Sitemap: ${ORIGIN}/sitemap.xml`));
+    assert.ok(robots.includes("Disallow: /track") && /Sitemap: https?:\/\/\S+\/sitemap\.xml/.test(robots));
     const sitemap = await (await fetch(`${ORIGIN}/sitemap.xml`)).text();
     assert.ok(sitemap.includes(`${ORIGIN}/product/${slug}`) && sitemap.includes(`${ORIGIN}/privacy`));
     assert.ok(variantId.length > 0);
