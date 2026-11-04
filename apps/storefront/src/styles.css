@@ -143,22 +143,47 @@ select:focus-visible {
   height: var(--announce-h);
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 20px;
+  overflow: hidden;
   /* A deeper take on --orange: cream text on it is 4.55:1 (AA); on --orange it is only 3.5:1. */
   background: #b8530a;
   color: var(--cream);
   position: relative;
   z-index: 6;
 }
-.announce-bar p {
-  margin: 0;
+.announce-bar__track,
+.announce-bar__group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 100%;
+  width: max-content;
+}
+.announce-bar__track {
+  animation: announce-loop 76s linear infinite;
+}
+.announce-bar:hover .announce-bar__track {
+  animation-play-state: paused;
+}
+.announce-bar__item {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  min-width: max(400px, 25vw);
+  padding: 0 28px;
+  white-space: nowrap;
+}
+.announce-bar__copy {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  text-align: center;
-  white-space: nowrap;
+}
+.announce-bar__separator {
+  color: var(--peach);
+  font-size: 12px;
+  line-height: 1;
 }
 .hero-wrap {
   background: var(--cream);
@@ -1268,11 +1293,13 @@ p {
   :root {
     --announce-h: 34px;
   }
-  .announce-bar p {
+  .announce-bar__copy {
     font-size: 10.5px;
     letter-spacing: 0.04em;
-    white-space: normal;
-    line-height: 1.25;
+  }
+  .announce-bar__item {
+    gap: 26px;
+    padding: 0 20px;
   }
   .site-header {
     height: 86px;
@@ -1677,9 +1704,36 @@ p {
   0%, 100% { transform: scaleX(0.45); opacity: 0.65; }
   50% { transform: scaleX(1); opacity: 1; }
 }
+@keyframes announce-loop {
+  to { transform: translate3d(-50%, 0, 0); }
+}
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  .announce-bar__track {
+    animation: none;
+    width: 100%;
+    justify-content: center;
+  }
+  .announce-bar__group {
+    width: 100%;
+    justify-content: center;
+  }
+  .announce-bar__group:nth-child(2),
+  .announce-bar__item:not(:first-child),
+  .announce-bar__separator {
+    display: none;
+  }
+  .announce-bar__item {
+    min-width: 0;
+    width: 100%;
+    padding: 0 12px;
+  }
+  .announce-bar__copy {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.2;
   }
   .hero-image {
     transform: none;

@@ -180,8 +180,19 @@ function Header({ dark = false }: { dark?: boolean }) {
       Skip to content
     </a>
     {banner ? (
-      <div className="announce-bar" role="note">
-        <p>{banner}</p>
+      <div className="announce-bar" role="note" aria-label={banner}>
+        <div className="announce-bar__track" aria-hidden="true">
+          {[0, 1].map((group) => (
+            <div className="announce-bar__group" key={group}>
+              {[0, 1, 2, 3].map((item) => (
+                <span className="announce-bar__item" key={item}>
+                  <span className="announce-bar__copy">{banner}</span>
+                  <span className="announce-bar__separator">✦</span>
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     ) : null}
     <header className={`site-header ${dark ? "site-header--dark" : ""}`}>
