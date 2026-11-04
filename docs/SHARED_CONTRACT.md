@@ -159,7 +159,7 @@ The draft 2 proposals (`caption`, `/families`, `/content`) are now used by the s
   - `variant_unavailable` and `out_of_stock` lines show the server message and a Remove action.
   - `insufficient_stock` offers "Use N", using `availableQuantity`.
   - `checkoutMessage` is shown, and the checkout button stays disabled until order placement is built.
-- **Shop filter**: options come from `GET /api/v1/families`. The four previous families are a fallback while it loads or if it fails. A family arriving from a link (a mood card) stays selectable, matched without regard to case or accents.
+- **Shop filter**: options come from `GET /api/v1/families`. Woody, Fresh, Floral and Gourmand are fallbacks while it loads or if it fails; the "Vanilla & creamy" mood card links to Gourmand. A family arriving from a link (a mood card) stays selectable, matched without regard to case or accents.
 - **Product page**:
   - Source-bottle images show `caption` under the main image, using the existing `.concept-note` style.
   - The "Editorial concept" label now appears only on `/preview/product`; real editorial images say "Editorial".

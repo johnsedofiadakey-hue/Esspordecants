@@ -461,6 +461,18 @@ function Home() {
                   <span aria-hidden="true">→</span>
                 </div>
               </a>
+              <a
+                href="/shop?family=Gourmand"
+                className="mood-card mood-card--vanilla"
+                data-reveal
+              >
+                <div className="mood-card__image" />
+                <div className="mood-card__body">
+                  <h3>Vanilla &amp; creamy</h3>
+                  <p>Warm, smooth, and quietly addictive.</p>
+                  <span aria-hidden="true">→</span>
+                </div>
+              </a>
             </div>
             <p className="concept-note">
               These mood images are editorial concepts. Product pages show the
@@ -557,7 +569,7 @@ function ProductCard({ product }: { product: ProductSummary }) {
 }
 
 // Used until the families endpoint answers, and if it cannot be reached.
-const fallbackFamilies = ["Woody", "Fresh", "Floral", "Amber"];
+const fallbackFamilies = ["Woody", "Fresh", "Floral", "Gourmand"];
 
 const foldName = (value: string) =>
   value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();

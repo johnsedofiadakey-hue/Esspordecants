@@ -377,7 +377,7 @@ p {
 }
 .mood-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 24px;
 }
 .mood-card {
@@ -419,13 +419,21 @@ p {
 .mood-card--floral .mood-card__image {
   background-image: url("/concept/mood-floral.jpg");
 }
+.mood-card--vanilla {
+  background: #e8c298;
+  color: var(--coffee);
+}
+.mood-card--vanilla .mood-card__image {
+  background-image: url("/concept/mood-vanilla.jpg");
+}
 .mood-card__body {
   position: relative;
   color: var(--cream);
   padding: 24px 28px 33px;
   min-height: 142px;
 }
-.mood-card--floral .mood-card__body {
+.mood-card--floral .mood-card__body,
+.mood-card--vanilla .mood-card__body {
   color: var(--coffee);
 }
 .mood-card h3 {
@@ -1243,6 +1251,9 @@ p {
   .brand img {
     width: 155px;
   }
+  .mood-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .mood-card__image {
     height: 300px;
   }
@@ -1633,6 +1644,9 @@ p {
   }
   .motion-ready .mood-card:nth-child(3)[data-reveal] {
     transition-delay: 0.2s;
+  }
+  .motion-ready .mood-card:nth-child(4)[data-reveal] {
+    transition-delay: 0.3s;
   }
   .motion-ready .mood-card.is-visible:hover {
     transform: translateY(-5px);
