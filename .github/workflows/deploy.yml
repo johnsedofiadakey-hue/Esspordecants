@@ -61,10 +61,9 @@ jobs:
       - name: Build admin
         run: npm run build --prefix apps/admin
 
+      # No VITE_API_BASE_URL: the build calls /api on its own domain.
       - name: Build storefront
         run: npm run build --prefix apps/storefront
-        env:
-          VITE_API_BASE_URL: https://esspordecants.web.app
 
       - uses: google-github-actions/auth@v3
         with:

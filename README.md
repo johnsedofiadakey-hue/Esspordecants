@@ -14,7 +14,7 @@ The app reads `VITE_API_BASE_URL` (see `.env.example`) and expects the public ro
 
 ## Firebase Hosting
 
-The storefront is deployed at https://esspordecants.web.app and the admin at https://esspordecants-admin.web.app. The storefront uses the same-origin Firebase Hosting rewrite for `/api/**` and `/media/**`; `VITE_API_BASE_URL` is set to the storefront origin in `.github/workflows/deploy.yml`. A push to `main` runs the checks and deploys both sites through Firebase Hosting.
+The storefront is deployed at https://esspordecantsgh.com (also https://esspordecants.web.app) and the admin at https://esspordecants-admin.web.app. The storefront uses the same-origin Firebase Hosting rewrite for `/api/**` and `/media/**`; production builds leave `VITE_API_BASE_URL` unset so they call `/api` on their own domain. A push to `main` runs the checks and deploys both sites through Firebase Hosting.
 
 ## Current boundaries
 

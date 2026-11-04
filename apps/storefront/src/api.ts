@@ -62,8 +62,10 @@ export type ProductPage = {
   total: number;
 };
 
+// Production builds call the API on whichever domain serves the page (Hosting rewrites
+// /api/** to the function), so the custom domain and web.app both work.
 const baseUrl = (
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:4000"
+  import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:4000" : "")
 ).replace(/\/$/, "");
 
 async function getJson<T>(path: string): Promise<T> {

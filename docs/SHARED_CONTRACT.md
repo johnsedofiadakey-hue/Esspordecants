@@ -143,10 +143,10 @@ Failures: `409 quote_changed` (with `details.quote` — re-show the bag), `422 d
 
 No route or field above changed. What changed is where things run:
 
-- **Hosting**: the storefront is the Firebase Hosting site `esspordecants` (https://esspordecants.web.app). The admin is the separate site `esspordecants-admin` (https://esspordecants-admin.web.app).
-- **API**: one Cloud Function, `api`, in `europe-west1`. Both sites rewrite `/api/**` to it, and the storefront also rewrites `/media/**`. The public API is therefore same-origin on the storefront at `https://esspordecants.web.app/api/v1/...`.
-- **Storefront build**: set `VITE_API_BASE_URL=https://esspordecants.web.app` at build time. The GitHub Actions workflow already does this. Local development is unchanged and still uses `http://localhost:4000`.
-- **Media URLs**: these are now `https://esspordecants.web.app/media/<file>`. They still resolve only while the image is approved and attached to something published. Public GETs send `Cache-Control: public, max-age=30, s-maxage=60`, so a publish or unpublish can take up to about a minute to show.
+- **Hosting**: the storefront is the Firebase Hosting site `esspordecants`, served at the custom domain https://esspordecantsgh.com (www redirects to it) and still at https://esspordecants.web.app. The admin is the separate site `esspordecants-admin` (https://esspordecants-admin.web.app).
+- **API**: one Cloud Function, `api`, in `europe-west1`. Both sites rewrite `/api/**` to it, and the storefront also rewrites `/media/**`. The public API is therefore same-origin on whichever storefront domain serves the page (`/api/v1/...`).
+- **Storefront build**: leave `VITE_API_BASE_URL` unset for production; the build then calls `/api` on its own domain, so the custom domain and web.app both work. Local development is unchanged and still uses `http://localhost:4000`.
+- **Media URLs**: these are now `https://esspordecantsgh.com/media/<file>` (from `PUBLIC_BASE_URL`); the storefront CSP allows that origin for images and video so web.app pages still show them. They still resolve only while the image is approved and attached to something published. Public GETs send `Cache-Control: public, max-age=30, s-maxage=60`, so a publish or unpublish can take up to about a minute to show.
 - **Deploys**: every push to `main` runs the API tests, builds both sites and deploys (`.github/workflows/deploy.yml`). Codex, storefront changes go live on merge to `main`.
 
 ## Storefront data wiring (2026-10-29, Claude, per the handoff follow-up)

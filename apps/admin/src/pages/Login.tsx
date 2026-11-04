@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { authErrorText, signIn } from "../auth.ts";
 import { Button, Field, Input } from "../components/ui.tsx";
 
-const storefrontUrl = import.meta.env.VITE_STOREFRONT_URL ?? "https://esspordecants.web.app";
+const storefrontUrl = import.meta.env.VITE_STOREFRONT_URL ?? "https://esspordecantsgh.com";
 
 // Signing in hands control back to App, which checks the account with the API.
 export function Login({ notice }: { notice?: string }) {
