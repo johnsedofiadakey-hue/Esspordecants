@@ -270,7 +270,12 @@ describe("Storefront in a real browser", () => {
   test("the home page shows the editable banner and has no console or security-policy errors", async () => {
     await browser.viewport(1280);
     await browser.go("/");
-    assert.equal(await browser.eval(`document.querySelector(".announce-bar").textContent`), "Order before 8PM for next-day delivery | Mon–Fri");
+    assert.equal(
+      await browser.eval(`document.querySelector(".announce-bar").getAttribute("aria-label")`),
+      "Order before 8PM for next-day delivery | Mon–Fri",
+    );
+    assert.equal(await browser.eval(`document.querySelector(".announce-bar__track").getAttribute("aria-hidden")`), "true");
+    assert.equal(await browser.eval(`getComputedStyle(document.querySelector(".announce-bar__track")).animationName`), "announce-loop");
     assert.match(await browser.eval<string>("document.title"), /Esspor Decants/);
     assert.equal(await browser.eval("!!document.querySelector('a.skip-link')"), true);
     assert.deepEqual(browser.consoleProblems, []);
