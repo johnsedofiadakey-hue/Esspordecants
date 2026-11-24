@@ -29,87 +29,16 @@ import {
   AuthVideo,
 } from "../components/ui.tsx";
 import { preparePhoto } from "../media.ts";
+import { FragranceSection, ScentSection, SIZES_ML, StorySection, toDetails, toPayload, TrustSection, type Details } from "../productForm.tsx";
 import { navigate } from "../router.ts";
-
-const CONCENTRATIONS = ["Parfum", "Extrait de Parfum", "Eau de Parfum", "Eau de Toilette", "Eau de Cologne", "Eau Fraîche"];
-const FAMILIES = ["Amber", "Aromatic", "Chypre", "Citrus", "Floral", "Fougère", "Fruity", "Gourmand", "Green", "Leather", "Musk", "Oud", "Spicy", "Woody"];
-
-type Details = {
-  slug: string;
-  house: string;
-  name: string;
-  concentration: string;
-  family: string;
-  shortDescription: string;
-  description: string;
-  notesTop: string;
-  notesHeart: string;
-  notesBase: string;
-  sourceBrand: string;
-  authenticityCopy: string;
-  whatArrives: string;
-  copyApproved: boolean;
-  bottleMaterial: string;
-  capType: string;
-  labelVersion: string;
-  packagingNotes: string;
-};
-
-const toDetails = (product: Product): Details => ({
-  slug: product.slug,
-  house: product.house,
-  name: product.name,
-  concentration: product.concentration,
-  family: product.family,
-  shortDescription: product.shortDescription,
-  description: product.description,
-  notesTop: product.notes.top.join(", "),
-  notesHeart: product.notes.heart.join(", "),
-  notesBase: product.notes.base.join(", "),
-  sourceBrand: product.sourceBrand,
-  authenticityCopy: product.authenticityCopy,
-  whatArrives: product.whatArrives,
-  copyApproved: product.copyApproved,
-  bottleMaterial: product.physical.bottleMaterial,
-  capType: product.physical.capType,
-  labelVersion: product.physical.labelVersion,
-  packagingNotes: product.physical.packagingNotes,
-});
-
-const splitNotes = (value: string) =>
-  value
-    .split(",")
-    .map((note) => note.trim())
-    .filter(Boolean);
-
-function toPayload(details: Details) {
-  return {
-    slug: details.slug,
-    house: details.house,
-    name: details.name,
-    concentration: details.concentration,
-    family: details.family,
-    shortDescription: details.shortDescription,
-    description: details.description,
-    notes: { top: splitNotes(details.notesTop), heart: splitNotes(details.notesHeart), base: splitNotes(details.notesBase) },
-    sourceBrand: details.sourceBrand,
-    authenticityCopy: details.authenticityCopy,
-    whatArrives: details.whatArrives,
-    copyApproved: details.copyApproved,
-    physical: {
-      bottleMaterial: details.bottleMaterial,
-      capType: details.capType,
-      labelVersion: details.labelVersion,
-      packagingNotes: details.packagingNotes,
-    },
-  };
-}
 
 export function ProductEditor({ id }: { id: string }) {
   const { data: product, setData: setProduct, error, reload } = useLoad(() => api<Product>("GET", `/products/${id}`), [id]);
   const [details, setDetails] = useState<Details | null>(null);
   const [saving, setSaving] = useState(false);
   const [acting, setActing] = useState("");
+  const [checklistOpen, setChecklistOpen] = useState(() => window.innerWidth > 1024);
+  const justCreated = new URLSearchParams(window.location.search).get("new") === "1";
   const toast = useToast();
 
   useEffect(() => {
@@ -217,6 +146,11 @@ export function ProductEditor({ id }: { id: string }) {
         }
       />
 
+      {justCreated ? (
+        <Notice>
+          <strong>Draft saved.</strong> Next: add photos of the real decant below, then tick off the publish checklist. Nothing is public until you press Publish.
+        </Notice>
+      ) : null}
       {product.isSample ? (
         <Notice tone="warn">This is a synthetic sample record for testing the admin. It can be edited but never published.</Notice>
       ) : null}
@@ -224,94 +158,10 @@ export function ProductEditor({ id }: { id: string }) {
       <div className="editor">
         <div className="editor-main">
           <form onSubmit={save} className="stack">
-            <Card title="Fragrance">
-              <div className="grid-2">
-                <Field label="House">
-                  <Input value={details.house} onChange={(e) => set("house", e.target.value)} required />
-                </Field>
-                <Field label="Name">
-                  <Input value={details.name} onChange={(e) => set("name", e.target.value)} required />
-                </Field>
-                <Field label="Concentration">
-                  <Input list="concentrations" value={details.concentration} onChange={(e) => set("concentration", e.target.value)} />
-                </Field>
-                <Field label="Scent family" hint="Used for storefront filtering. Keep spelling consistent.">
-                  <Input list="families" value={details.family} onChange={(e) => set("family", e.target.value)} />
-                </Field>
-                <Field label="URL slug" hint="Lowercase words joined by hyphens." wide>
-                  <Input value={details.slug} onChange={(e) => set("slug", e.target.value.toLowerCase())} pattern="[a-z0-9]+(-[a-z0-9]+)*" />
-                </Field>
-              </div>
-              <datalist id="concentrations">
-                {CONCENTRATIONS.map((value) => (
-                  <option key={value} value={value} />
-                ))}
-              </datalist>
-              <datalist id="families">
-                {FAMILIES.map((value) => (
-                  <option key={value} value={value} />
-                ))}
-              </datalist>
-            </Card>
-
-            <Card title="Copy">
-              <div className="grid-2">
-                <Field label="Short description" hint={`${details.shortDescription.length}/280 · shown on catalogue cards.`} wide>
-                  <Textarea rows={2} maxLength={280} value={details.shortDescription} onChange={(e) => set("shortDescription", e.target.value)} />
-                </Field>
-                <Field label="Full description" wide>
-                  <Textarea rows={6} value={details.description} onChange={(e) => set("description", e.target.value)} />
-                </Field>
-                <Field label="Top notes" hint="Comma separated. Only verified notes.">
-                  <Input value={details.notesTop} onChange={(e) => set("notesTop", e.target.value)} />
-                </Field>
-                <Field label="Heart notes">
-                  <Input value={details.notesHeart} onChange={(e) => set("notesHeart", e.target.value)} />
-                </Field>
-                <Field label="Base notes">
-                  <Input value={details.notesBase} onChange={(e) => set("notesBase", e.target.value)} />
-                </Field>
-              </div>
-            </Card>
-
-            <Card title="Authenticity and what arrives">
-              <div className="grid-2">
-                <Field label="Source brand" hint="Brand of the original bottle the decant is drawn from.">
-                  <Input value={details.sourceBrand} onChange={(e) => set("sourceBrand", e.target.value)} />
-                </Field>
-                <Field label="Authenticity statement" wide>
-                  <Textarea rows={3} value={details.authenticityCopy} onChange={(e) => set("authenticityCopy", e.target.value)} />
-                </Field>
-                <Field label="What arrives" hint="Exactly what the buyer receives: decant, sprayer, label, packaging." wide>
-                  <Textarea rows={3} value={details.whatArrives} onChange={(e) => set("whatArrives", e.target.value)} />
-                </Field>
-                <div className="field-wide">
-                  <Checkbox
-                    checked={details.copyApproved}
-                    onChange={(value) => set("copyApproved", value)}
-                    label="Copy approved for publication"
-                    hint="Confirms the description, notes and claims have been checked."
-                  />
-                </div>
-              </div>
-            </Card>
-
-            <Card title="Physical decant" actions={<span className="muted small">Must match what ships</span>}>
-              <div className="grid-2">
-                <Field label="Bottle material">
-                  <Input value={details.bottleMaterial} onChange={(e) => set("bottleMaterial", e.target.value)} placeholder="e.g. Clear glass" />
-                </Field>
-                <Field label="Cap / sprayer type">
-                  <Input value={details.capType} onChange={(e) => set("capType", e.target.value)} placeholder="e.g. Black fine-mist atomiser" />
-                </Field>
-                <Field label="Label version">
-                  <Input value={details.labelVersion} onChange={(e) => set("labelVersion", e.target.value)} placeholder="e.g. v1 cream label" />
-                </Field>
-                <Field label="Packaging notes">
-                  <Input value={details.packagingNotes} onChange={(e) => set("packagingNotes", e.target.value)} />
-                </Field>
-              </div>
-            </Card>
+            <FragranceSection d={details} set={set} showSlug />
+            <ScentSection d={details} set={set} />
+            <StorySection d={details} set={set} />
+            <TrustSection d={details} set={set} />
 
             <div className={`savebar ${dirty ? "visible" : ""}`}>
               <span>Unsaved changes</span>
@@ -327,24 +177,40 @@ export function ProductEditor({ id }: { id: string }) {
         </div>
 
         <aside className="editor-side">
-          <Card title="Publish checklist">
-            <ul className="checklist">
-              {product.readiness.map((check) => (
-                <li key={check.code} className={check.ok ? "ok" : "todo"}>
-                  <span aria-hidden>{check.ok ? "✓" : "○"}</span>
-                  {check.message}
-                </li>
-              ))}
-            </ul>
-            <p className="muted small">
-              {product.status === "published"
-                ? "Live. Edits that would fail a check are rejected."
-                : failing.length
-                  ? `${failing.length} item${failing.length > 1 ? "s" : ""} left before publishing.`
-                  : dirty
-                    ? "Save changes, then publish."
-                    : "Ready to publish."}
-            </p>
+          <Card className="checklist-card">
+            <button type="button" className="checklist-toggle" aria-expanded={checklistOpen} onClick={() => setChecklistOpen((open) => !open)}>
+              <span>
+                <strong>Publish checklist</strong>
+                <small className="muted">
+                  {product.readiness.length - failing.length} of {product.readiness.length} done
+                  {product.status === "published" ? " · live" : ""}
+                </small>
+              </span>
+              <span className="checklist-bar" aria-hidden="true">
+                <i style={{ width: `${Math.round(((product.readiness.length - failing.length) / product.readiness.length) * 100)}%` }} />
+              </span>
+            </button>
+            {checklistOpen ? (
+              <>
+                <ul className="checklist">
+                  {[...product.readiness].sort((a, b) => Number(a.ok) - Number(b.ok)).map((check) => (
+                    <li key={check.code} className={check.ok ? "ok" : "todo"}>
+                      <span aria-hidden>{check.ok ? "✓" : "○"}</span>
+                      {check.message}
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted small">
+                  {product.status === "published"
+                    ? "Live. Edits that would fail a check are rejected."
+                    : failing.length
+                      ? `${failing.length} item${failing.length > 1 ? "s" : ""} left before publishing.`
+                      : dirty
+                        ? "Save changes, then publish."
+                        : "Ready to publish."}
+                </p>
+              </>
+            ) : null}
           </Card>
         </aside>
       </div>
@@ -571,6 +437,9 @@ function Variants({ product, onChange }: { product: Product; onChange: () => Pro
   const [stock, setStock] = useState("0");
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const letters = (value: string, count: number) => value.normalize("NFD").replace(/[^A-Za-z]/g, "").slice(0, count).toUpperCase();
+  const suggestSku = (ml: number) => `${letters(product.house, 3) || "ESS"}-${letters(product.name, 3) || "NEW"}-${ml}`;
+  const missing = SIZES_ML.filter((ml) => !product.variants.some((variant) => variant.sizeMl === ml));
 
   async function add(event: FormEvent) {
     event.preventDefault();
@@ -598,8 +467,8 @@ function Variants({ product, onChange }: { product: Product; onChange: () => Pro
   return (
     <Card title="Sizes, prices and stock" actions={<span className="muted small">Prices in GHS · stored as pesewas</span>}>
       <Notice>
-        Exact decant sizes are pending merchant confirmation. If a size uses a different bottle, tick “Different bottle” and attach its own approved
-        photo so the storefront shows what actually ships.
+        Each size is its own bottle with its own price and stock count. If a size comes in a different-looking bottle, tick “Different bottle” on it and
+        pick a photo of that bottle, so the shop shows what really arrives.
       </Notice>
       {product.variants.length ? (
         <div className="variant-list">
@@ -610,6 +479,26 @@ function Variants({ product, onChange }: { product: Product; onChange: () => Pro
       ) : (
         <p className="muted">No sizes yet.</p>
       )}
+      {missing.length ? (
+        <div className="quick-sizes">
+          <span className="muted small">Add a size:</span>
+          <div className="chips">
+            {missing.map((ml) => (
+              <button
+                key={ml}
+                type="button"
+                className={`chip chip-size ${Number(size) === ml ? "on" : ""}`}
+                onClick={() => {
+                  setSize(String(ml));
+                  setSku(suggestSku(ml));
+                }}
+              >
+                {ml} ml
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <form className="variant-add" onSubmit={add}>
         <Field label="SKU">
           <Input value={sku} onChange={(e) => setSku(e.target.value.toUpperCase())} placeholder="ESS-XXX-5" required pattern="[A-Za-z0-9-]{3,40}" />

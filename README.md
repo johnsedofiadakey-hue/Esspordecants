@@ -22,6 +22,7 @@ The homepage uses clearly labelled generated concept imagery. Replace it with ap
 
 ## More documentation
 
+- `docs/ADMIN_GUIDE.md`: the manual for the shop owner (also inside the admin under Help).
 - `docs/OPERATIONS.md`: go-live and running checklist (secrets, Paystack setup, backups, budget alerts, custom domain).
 - `docs/CLAUDE_REPORT.md`: what was built, how to run and test it, and what is left.
 - `docs/AUDIT_2026-11-02.md`: the audit of what a launch needs, with a status table at the end.

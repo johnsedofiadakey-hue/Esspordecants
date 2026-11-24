@@ -67,6 +67,13 @@ export type Product = {
   whatArrives: string;
   copyApproved: boolean;
   physical: { bottleMaterial: string; capType: string; labelVersion: string; packagingNotes: string };
+  audience: "" | "women" | "men" | "unisex";
+  accords: string[];
+  longevity: number;
+  projection: number;
+  seasons: string[];
+  occasions: string[];
+  featured: boolean;
   isSample: boolean;
   publishedAt: string | null;
   updatedAt: string;

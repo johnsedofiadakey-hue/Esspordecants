@@ -298,3 +298,26 @@ Everything in `docs/AUDIT_2026-11-02.md` that did not depend on a business decis
 - Discount codes, a customers list and sales reports beyond the 30-day figures were not asked for and are not built.
 - Videos still have no captions.
 - Real photography replaces the generated concept images on the home page; until then their "concept" captions stay.
+
+## 13. A fuller shop, an admin that works on a phone, and a manual (2026-11-24)
+
+Requested by the merchant: product entry that suits a fragrance seller (pick bottle sizes and flavours, write details), a storefront that looks like a real fragrance shop, an admin that looks good on a phone, and a manual so she can run it alone.
+
+**Admin on a phone**
+- App-style bottom bar (Overview, Products, Orders, Content, More), replacing the slide-out menu. **More** holds Settings, Help, the order-alert switch and Sign out.
+- Every table turns into a stack of cards on a phone (headings copied onto the cells by `useCardTables` in `main.tsx`); products and orders are now row lists. Buttons and fields are tap-sized and 16 px (iPhones no longer zoom in), sticky save bars sit above the bottom bar, and the product checklist is a collapsed progress bar.
+- **Add a fragrance** (`/products/new`): one guided page. Tap-to-choose strength, who it is for, scent family and flavours; tag inputs with suggestions for top, heart and base notes; bottle sizes as one-tap buttons with price, stock and an automatic SKU per size; details (summary, description, how long it lasts, how far it travels, seasons, occasions, feature on home page); and what the customer receives. It saves progress on the phone as you type, remembers the bottle and wording details from the last product, and saves the product with all its sizes as a draft, then opens the editor to add photos. The editor uses the same pieces (`apps/admin/src/productForm.tsx`) and has one-tap sizes.
+- **Help** (`/help`, in the menu): the admin guide, readable and printable. The source is `docs/ADMIN_GUIDE.md`, so the printed guide and the in-app page cannot drift apart. The guide names the buttons exactly as they appear.
+
+**Storefront**: see `SHARED_CONTRACT.md`, draft 7. Existing brand imagery, ticker and checkout are unchanged.
+
+**Verification**
+- API tests 47 of 47 (new: scent profile validation, every filter and sort, facets, spreadsheet audience and flavours).
+- Browser tests 14 of 14 (`npm run e2e`, now also run for the admin): the shop's filters, sorting and clearing, product detail, the phone filter sheet and sticky buy bar, admin sign-in, the phone layout and "nothing off the screen" on seven admin pages, the whole Add a fragrance flow saved and read back through the API, and the Help guide. The first run caught a real sideways overflow on the phone home page, since fixed.
+- Looked at by eye in the preview browser at desktop and phone width: shop, product page, filter sheet, sticky bar, admin lists, Add a fragrance, the editor and Help.
+- Local demo catalogue: `npm run fixtures:local` now loads ten fictional fragrances with generated bottle pictures, only for judging the design.
+
+**Not done**
+- The storefront has no real product photographs until the merchant provides them; cards are built for them.
+- The Help guide describes the screens as built today; update `docs/ADMIN_GUIDE.md` whenever a screen's wording changes.
+- No customer reviews or ratings (nothing real to show yet), and no wishlist.

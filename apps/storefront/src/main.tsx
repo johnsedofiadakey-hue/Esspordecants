@@ -16,7 +16,6 @@ import {
   getQuote,
   getSite,
   listContent,
-  listFamilies,
   listProducts,
   OrderError,
   payForOrder,
@@ -31,6 +30,24 @@ import {
   type Quote,
   type SiteSettings,
 } from "./api";
+import {
+  ActiveFilters,
+  AUDIENCE_LABEL,
+  cap,
+  Faq,
+  FilterPanel,
+  LineIcon,
+  LONGEVITY,
+  Meter,
+  NotesPyramid,
+  ProductCard,
+  ProductShelf,
+  PROJECTION,
+  TrustBar,
+  useFacets,
+  useShopFilters,
+  useShopProducts,
+} from "./shop";
 import "./styles.css";
 
 const previewProduct: Product = {
@@ -47,6 +64,16 @@ const previewProduct: Product = {
     alt: "Illustrative concept of a travel-size decant; final bottle photography pending",
     role: "decant-front",
   },
+  altImage: null,
+  audience: "",
+  accords: [],
+  featured: false,
+  isNew: false,
+  sizes: [],
+  longevity: 0,
+  projection: 0,
+  seasons: [],
+  occasions: [],
   minPriceMinor: 0,
   currency: "GHS",
   available: false,
@@ -317,18 +344,23 @@ function Home() {
   usePageTitle("Esspor Decants");
   const hero = usePlacement("home-hero");
   const story = usePlacement("home-story");
-  const [featured, setFeatured] = useState<ProductSummary[]>([]);
+  const site = useSite();
+  const facets = useFacets();
+  const [newest, setNewest] = useState<ProductSummary[]>([]);
+  const [highlights, setHighlights] = useState<ProductSummary[]>([]);
   useEffect(() => {
     let active = true;
-    listProducts()
-      .then((page) => {
-        if (active) setFeatured(page.items.slice(0, 3));
-      })
+    listProducts({ pageSize: 8 })
+      .then((page) => active && setNewest(page.items))
+      .catch(() => {});
+    listProducts({ featured: true, pageSize: 8 })
+      .then((page) => active && setHighlights(page.items))
       .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
+  const hasProducts = newest.length > 0;
   return (
     <>
       <div className="reading-progress" aria-hidden="true" />
@@ -380,9 +412,9 @@ function Home() {
               <div className="hero-actions">
                 <a
                   className="button button--orange"
-                  href={hero?.cta?.href || (featured.length ? "/shop" : "/how-it-works")}
+                  href={hero?.cta?.href || (hasProducts ? "/shop" : "/how-it-works")}
                 >
-                  {hero?.cta?.label || (featured.length ? "Shop decants" : "Discover Esspor")}{" "}
+                  {hero?.cta?.label || (hasProducts ? "Shop decants" : "Discover Esspor")}{" "}
                   <span aria-hidden="true">→</span>
                 </a>
                 <a
@@ -402,6 +434,7 @@ function Home() {
               Scroll to discover <span />
             </span>
           </section>
+          <TrustBar />
           <section className="intro section-pad">
             <div data-reveal>
               <p className="eyebrow">{story?.eyebrow || "The Esspor way"}</p>
@@ -497,18 +530,60 @@ function Home() {
               actual Esspor decant separately from the original fragrance bottle.
             </p>
           </section>
-          {featured.length > 0 ? (
-            <section className="featured section-pad" aria-labelledby="featured-title">
+          <ProductShelf id="new-title" eyebrow="Just in" title="New arrivals." href="/shop?sort=newest" products={newest.slice(0, 8)} />
+          <ProductShelf
+            id="featured-title"
+            eyebrow="Staff picks"
+            title="Our favourites right now."
+            href="/shop"
+            products={highlights.filter((product) => !newest.slice(0, 4).some((entry) => entry.id === product.id)).slice(0, 4)}
+          />
+          {hasProducts ? (
+            <section className="ways section-pad" aria-labelledby="ways-title">
               <div className="section-heading" data-reveal>
                 <div>
-                  <p className="eyebrow">From the collection</p>
-                  <h2 id="featured-title">Ready for discovery.</h2>
+                  <p className="eyebrow">Find your fit</p>
+                  <h2 id="ways-title">Shop your way.</h2>
                 </div>
-                <a className="text-link" href="/shop">Shop all <span aria-hidden="true">→</span></a>
               </div>
-              <div className="product-grid">
-                {featured.map((product) => <ProductCard key={product.id} product={product} />)}
+              <div className="ways__grid">
+                {facets && facets.sizes.length ? (
+                  <div className="ways__block" data-reveal>
+                    <h3>By bottle size</h3>
+                    <div className="ways__tiles">
+                      {facets.sizes.map((entry) => (
+                        <a key={entry.sizeMl} href={`/shop?size=${entry.sizeMl}`} className="ways__tile">
+                          <strong>{entry.sizeMl} ml</strong>
+                          <span>{entry.sizeMl <= 3 ? "A first taste" : entry.sizeMl <= 5 ? "Try it out" : "Wear it often"}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <div className="ways__block" data-reveal>
+                  <h3>Who it's for</h3>
+                  <div className="ways__tiles">
+                    {(["women", "men", "unisex"] as const).map((name) => (
+                      <a key={name} href={`/shop?audience=${name}`} className="ways__tile">
+                        <strong>{AUDIENCE_LABEL[name]}</strong>
+                        <span>{name === "unisex" ? "Shared scents" : name === "women" ? "Her signature" : "His signature"}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               </div>
+              {facets && facets.houses.length > 1 ? (
+                <div className="brands" data-reveal>
+                  <span className="eyebrow">Houses we carry</span>
+                  <ul>
+                    {facets.houses.map((house) => (
+                      <li key={house.name}>
+                        <a href={`/shop?house=${encodeURIComponent(house.name)}`}>{house.name}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </section>
           ) : null}
           <section className="decant-story section-pad" aria-labelledby="decant-story-title">
@@ -550,6 +625,40 @@ function Home() {
               </div>
             </div>
           </section>
+          <section className="faq-section section-pad" aria-labelledby="faq-title">
+            <div className="section-heading" data-reveal>
+              <div>
+                <p className="eyebrow">Good to know</p>
+                <h2 id="faq-title">Questions, answered.</h2>
+              </div>
+            </div>
+            <div data-reveal>
+              <Faq
+                items={[
+                  { q: "What is a decant?", a: <p>A small portion of an original fragrance, transferred into a travel-size bottle. You get the real scent without paying for or committing to a full-size bottle.</p> },
+                  { q: "Are the fragrances authentic?", a: <p>Yes. Esspor sells authentic Arabian, designer and niche fragrances. Each product page says which brand the decant is drawn from and shows what arrives.</p> },
+                  { q: "Which size should I choose?", a: <p>Smaller sizes are ideal for trying something new. Larger ones suit a scent you already know you love. Every size is shown with its own price before you buy.</p> },
+                  { q: "How does delivery work?", a: <p>{site.announcement.trim() || "We deliver Monday to Friday."} Delivery areas and fees are shown at checkout. See <a href="/delivery-returns">Delivery &amp; returns</a>.</p> },
+                  { q: "How do I follow my order?", a: <p>After you order you get an order number. Take a screenshot of it, then use <a href="/track">Track order</a> any time to see where it is.</p> },
+                  { q: "How do I pay?", a: <p>You pay securely online at checkout, and you see the total, including delivery, before you confirm.</p> },
+                ]}
+              />
+            </div>
+          </section>
+          {whatsappLink(site, "Hello Esspor, I need help choosing a fragrance.") ? (
+            <section className="chat-band section-pad">
+              <div className="chat-band__panel" data-reveal>
+                <LineIcon name="chat" />
+                <div>
+                  <h2>Not sure what to pick?</h2>
+                  <p>Tell us what you like and we will point you to a scent.</p>
+                </div>
+                <a className="button button--orange" href={whatsappLink(site, "Hello Esspor, I need help choosing a fragrance.")}>
+                  Chat on WhatsApp <span aria-hidden="true">→</span>
+                </a>
+              </div>
+            </section>
+          ) : null}
         </main>
       </div>
       <Footer />
@@ -557,158 +666,119 @@ function Home() {
   );
 }
 
-function ProductCard({ product }: { product: ProductSummary }) {
-  return (
-    <a
-      href={`/product/${encodeURIComponent(product.slug)}`}
-      className="product-card"
-    >
-      <div className="product-card__image">
-        <img
-          src={product.heroImage.url}
-          alt={product.heroImage.alt}
-          loading="lazy"
-        />
-      </div>
-      <div className="product-card__meta">
-        <span>{product.house}</span>
-        <span>
-          {product.available
-            ? `From ${formatMoney(product.minPriceMinor)}`
-            : "Currently unavailable"}
-        </span>
-      </div>
-      <h3>{product.name}</h3>
-      <p>
-        {product.concentration} · {product.family}
-      </p>
-    </a>
-  );
-}
-
-// Used until the families endpoint answers, and if it cannot be reached.
-const fallbackFamilies = ["Woody", "Fresh", "Floral", "Gourmand"];
-
-const foldName = (value: string) =>
-  value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-function useFamilies(selected: string) {
-  const [families, setFamilies] = useState<string[]>(fallbackFamilies);
-  useEffect(() => {
-    let active = true;
-    listFamilies()
-      .then((result) => {
-        if (active) setFamilies(result.items.map((family) => family.name));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
-  // Keep a family chosen from a link (e.g. a mood card) selectable even with no products yet.
-  const match = families.find((name) => foldName(name) === foldName(selected));
-  return {
-    families: selected && !match ? [...families, selected] : families,
-    selectedFamily: match ?? selected,
-  };
-}
+const SORTS: [string, string][] = [
+  ["newest", "Newest"],
+  ["price-asc", "Price: low to high"],
+  ["price-desc", "Price: high to low"],
+  ["name", "Name A–Z"],
+];
 
 function Shop() {
   usePageTitle("Shop all fragrances");
-  const params = new URLSearchParams(window.location.search);
-  const query = params.get("query") || "";
-  const family = params.get("family") || "";
-  const { families, selectedFamily } = useFamilies(family);
-  const [state, setState] = useState<{
-    loading: boolean;
-    products: ProductSummary[];
-    error: boolean;
-  }>({ loading: true, products: [], error: false });
-  useEffect(() => {
-    let active = true;
-    listProducts(query, family)
-      .then((page) => {
-        if (active)
-          setState({
-            loading: false,
-            products: page.items.filter((p) => p.status === "published"),
-            error: false,
-          });
-      })
-      .catch(() => {
-        if (active) setState({ loading: false, products: [], error: true });
-      });
-    return () => {
-      active = false;
-    };
-  }, [query, family]);
+  const [filters, set, clear] = useShopFilters();
+  const facets = useFacets();
+  const result = useShopProducts(filters);
+  const [drawer, setDrawer] = useState(false);
+  const [text, setText] = useState(filters.query);
+  useEffect(() => setText(filters.query), [filters.query]);
+  const narrowed = Boolean(filters.query || filters.family || filters.audience || filters.accord || filters.house || filters.size || filters.price);
+  const activeCount = [filters.family, filters.audience, filters.accord, filters.house, filters.size, filters.price].filter(Boolean).length;
   return (
     <>
       <Header />
-      <main id="main" className="page-shell">
+      <main id="main" className="page-shell shop-page">
         <div className="page-hero">
           <p className="eyebrow">The collection</p>
           <h1>Find your fragrance.</h1>
-          <p>
-            Explore authentic Arabian, designer and niche fragrances in decants.
-          </p>
+          <p>Explore authentic Arabian, designer and niche fragrances in decants.</p>
         </div>
-        <div className="catalog-toolbar">
-          <form action="/shop" method="get" role="search">
+        <div className="shop-bar">
+          <form
+            role="search"
+            onSubmit={(event: FormEvent) => {
+              event.preventDefault();
+              set({ query: text.trim() });
+            }}
+          >
             <label className="sr-only" htmlFor="catalog-query">
               Search fragrances
             </label>
-            <input
-              id="catalog-query"
-              type="search"
-              name="query"
-              placeholder="Search fragrance or house"
-              defaultValue={query}
-            />
+            <input id="catalog-query" type="search" placeholder="Search by name, house or flavour" value={text} onChange={(event) => setText(event.target.value)} />
             <button type="submit">Search</button>
           </form>
-          <label>
-            Family{" "}
-            <select
-              value={selectedFamily}
-              onChange={(event) => {
-                const next = new URLSearchParams(window.location.search);
-                if (event.target.value) next.set("family", event.target.value);
-                else next.delete("family");
-                window.location.href = `/shop?${next}`;
-              }}
-            >
-              <option value="">All scents</option>
-              {families.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+          <button type="button" className="shop-bar__filters" onClick={() => setDrawer(true)}>
+            Filters{activeCount ? ` (${activeCount})` : ""}
+          </button>
+          <label className="shop-bar__sort">
+            <span>Sort</span>
+            <select value={filters.sort} onChange={(event) => set({ sort: event.target.value })}>
+              {SORTS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>
           </label>
         </div>
-        {state.loading ? (
-          <p className="status-panel" role="status">
-            Loading the collection…
-          </p>
-        ) : state.products.length ? (
-          <div className="product-grid">
-            {state.products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        ) : (
-          <div className="status-panel status-panel--collection">
-            <p className="eyebrow">{state.error ? "Collection update" : query || family ? "No match yet" : "Coming to Esspor"}</p>
-            <h2>{state.error ? "The collection is temporarily unavailable." : query || family ? "No fragrance matches this search." : "Our first fragrances are being prepared."}</h2>
-            <p>{state.error ? "Please try again shortly, or learn how Esspor decants work." : query || family ? "Try another fragrance name or scent family." : "Each listing will show the real Esspor decant, its size and price, and the original source bottle separately."}</p>
-            <div className="status-panel__actions">
-              {query || family ? <a className="button button--orange" href="/shop">View all scents →</a> : null}
-              <a className={query || family ? "text-link" : "button button--orange"} href="/how-it-works">How it works →</a>
-              {!query && !family ? <a className="text-link" href="/contact">Get in touch →</a> : null}
+        <ActiveFilters filters={filters} set={set} clear={clear} />
+        <div className="shop-layout">
+          <aside className={`shop-filters ${drawer ? "open" : ""}`} aria-label="Filters">
+            <div className="shop-filters__head">
+              <strong>Filters</strong>
+              <button type="button" onClick={() => setDrawer(false)}>
+                Done
+              </button>
             </div>
-          </div>
-        )}
+            <FilterPanel facets={facets} filters={filters} set={set} />
+          </aside>
+          {drawer ? <button type="button" className="shop-filters__backdrop" aria-label="Close filters" onClick={() => setDrawer(false)} /> : null}
+          <section className="shop-results" aria-live="polite">
+            {result.loading ? (
+              <p className="status-panel" role="status">
+                Loading the collection…
+              </p>
+            ) : result.products.length ? (
+              <>
+                <p className="shop-count">
+                  {result.total} fragrance{result.total === 1 ? "" : "s"}
+                </p>
+                <div className="product-grid">
+                  {result.products.map((product) => (
+                    <ProductCard key={product.id} product={product} />
+                  ))}
+                </div>
+                {result.products.length < result.total ? (
+                  <div className="load-more">
+                    <button type="button" className="button button--orange" onClick={result.loadMore} disabled={result.more}>
+                      {result.more ? "Loading…" : "Show more fragrances"}
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="status-panel status-panel--collection">
+                <p className="eyebrow">{result.error ? "Collection update" : narrowed ? "No match yet" : "Coming to Esspor"}</p>
+                <h2>{result.error ? "The collection is temporarily unavailable." : narrowed ? "No fragrance matches these choices." : "Our first fragrances are being prepared."}</h2>
+                <p>{result.error ? "Please try again shortly, or learn how Esspor decants work." : narrowed ? "Try removing a filter or searching for something else." : "Each listing will show the real Esspor decant, its size and price, and the original source bottle separately."}</p>
+                <div className="status-panel__actions">
+                  {narrowed ? (
+                    <button type="button" className="button button--orange" onClick={clear}>
+                      Clear filters →
+                    </button>
+                  ) : null}
+                  <a className={narrowed ? "text-link" : "button button--orange"} href="/how-it-works">
+                    How it works →
+                  </a>
+                  {!narrowed ? (
+                    <a className="text-link" href="/contact">
+                      Get in touch →
+                    </a>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
       </main>
       <Footer />
     </>
@@ -734,7 +804,36 @@ function ProductPage({
   );
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [related, setRelated] = useState<ProductSummary[]>([]);
+  const [showSticky, setShowSticky] = useState(false);
+  const buyRef = useRef<HTMLDivElement>(null);
   usePageTitle(product ? `${product.name} by ${product.house}` : "Fragrance", { noindex: preview });
+  // Fragrances in the same family, then the newest, so the shelf is never empty if there are others.
+  useEffect(() => {
+    if (preview || !product) return;
+    let active = true;
+    listProducts({ family: product.family, pageSize: 9 })
+      .then(async (page) => {
+        let items = page.items.filter((entry) => entry.id !== product.id);
+        if (items.length < 4) {
+          const more = await listProducts({ pageSize: 9 });
+          items = [...items, ...more.items.filter((entry) => entry.id !== product.id && !items.some((other) => other.id === entry.id))];
+        }
+        if (active) setRelated(items.slice(0, 4));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [product?.id, preview]);
+  // On a phone, keep the buy button in reach once the main one has scrolled away.
+  useEffect(() => {
+    const target = buyRef.current;
+    if (!target || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => setShowSticky(!entry!.isIntersecting && entry!.boundingClientRect.top < 0), { threshold: 0 });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [product?.id]);
   useEffect(() => {
     if (preview || !slug) return;
     let active = true;
@@ -877,24 +976,35 @@ function ProductPage({
                 </p>
               </div>
               <div className="product-info" data-reveal>
-                <p className="eyebrow">Decanted by Esspor</p>
-                <h1>{product.name}</h1>
+                <div className="pinfo__badges">
+                  {product.isNew ? <span className="pill pill--new">New</span> : null}
+                  {product.audience ? <span className="pill">{AUDIENCE_LABEL[product.audience]}</span> : null}
+                  {product.concentration ? <span className="pill pill--soft">{product.concentration}</span> : null}
+                </div>
                 <p className="product-house">
-                  {product.house} · {product.concentration}
+                  <a href={`/shop?house=${encodeURIComponent(product.house)}`}>{product.house}</a>
                 </p>
-                <p className="product-description">
-                  {product.shortDescription}
-                </p>
+                <h1>{product.name}</h1>
+                <p className="product-description">{product.shortDescription}</p>
+                {product.accords.length ? (
+                  <ul className="accord-list" aria-label="Flavours">
+                    {product.accords.map((accord) => (
+                      <li key={accord}>
+                        <a href={`/shop?accord=${encodeURIComponent(accord)}`}>{cap(accord)}</a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 <div className="variant-section">
-                  <h2>Choose your size</h2>
-                  <div className="variant-options">
+                  <h2>
+                    Choose your size <small>{variant ? `${variant.sizeMl} ml selected` : ""}</small>
+                  </h2>
+                  <div className="size-cards" role="group" aria-label="Bottle size">
                     {product.variants.map((option) => (
                       <button
                         key={option.id}
                         type="button"
-                        className={
-                          selectedVariant === option.id ? "selected" : ""
-                        }
+                        className={`size-card ${selectedVariant === option.id ? "selected" : ""}`}
                         disabled={!option.available && !preview}
                         onClick={() => {
                           setSelectedVariant(option.id);
@@ -903,13 +1013,47 @@ function ProductPage({
                         }}
                         aria-pressed={selectedVariant === option.id}
                       >
-                        {option.sizeMl} ml
+                        <strong>{option.sizeMl} ml</strong>
+                        <span>{preview ? "Price pending" : formatMoney(option.priceMinor)}</span>
+                        {!option.available ? <em>Sold out</em> : option.stockStatus === "low_stock" ? <em className="few">Few left</em> : null}
                       </button>
                     ))}
                   </div>
-                  <p className="variant-help">
-                    Size refers to the Esspor decant you receive, not the original full-size bottle.
-                  </p>
+                  <p className="variant-help">Size refers to the Esspor decant you receive, not the original full-size bottle.</p>
+                </div>
+                <div className="product-buy" ref={buyRef}>
+                  <div className="product-buy__price">
+                    <strong>{preview ? "Price pending" : variant ? formatMoney(variant.priceMinor) : "Select a size"}</strong>
+                    <span>
+                      {preview ? "For layout review only." : variant?.available ? (variant.stockStatus === "low_stock" ? "Only a few left in this size." : "In stock · confirmed at checkout") : "This size is currently unavailable."}
+                    </span>
+                  </div>
+                  <div className="buy-row">
+                    <label className="quantity-control">
+                      <span className="sr-only">Quantity</span>
+                      <select value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} aria-label="Quantity">
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="button button--orange" disabled={!canAdd} onClick={add}>
+                      {preview ? "Preview only" : canAdd ? "Add to bag →" : "Unavailable"}
+                    </button>
+                  </div>
+                  {added && (
+                    <p className="added-message" role="status">
+                      Added to your bag. <a href="/bag">Check out →</a>
+                    </p>
+                  )}
+                  <ul className="trust-list">
+                    <li>Authentic fragrance</li>
+                    <li>Labelled Esspor decant</li>
+                    <li>Secure online payment</li>
+                    <li>Track your order any time</li>
+                  </ul>
                 </div>
                 <div className="product-receive" aria-live="polite">
                   <span className="eyebrow">What arrives</span>
@@ -922,89 +1066,64 @@ function ProductPage({
                         : "The gallery shows the Esspor decant for this fragrance."}
                   </small>
                 </div>
-                <div className="product-buy">
-                  <strong>
-                    {preview
-                      ? "Price pending"
-                      : variant
-                        ? formatMoney(variant.priceMinor)
-                        : "Select a size"}
-                  </strong>
-                  <p>
-                    {preview
-                      ? "For layout review only."
-                      : variant?.available
-                        ? "Availability confirmed at checkout."
-                        : "This size is currently unavailable."}
-                  </p>
-                  <div className="buy-row">
-                    <label className="quantity-control">
-                      <span className="sr-only">Quantity</span>
-                      <select
-                        value={quantity}
-                        onChange={(event) =>
-                          setQuantity(Number(event.target.value))
-                        }
-                        aria-label="Quantity"
-                      >
-                        {[1, 2, 3, 4, 5].map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      className="button button--orange"
-                      disabled={!canAdd}
-                      onClick={add}
-                    >
-                      {preview
-                        ? "Preview only"
-                        : canAdd
-                          ? "Add to bag →"
-                          : "Unavailable"}
-                    </button>
-                  </div>
-                  {added && (
-                    <p className="added-message" role="status">
-                      Added to your bag. <a href="/bag">Check out →</a>
-                    </p>
-                  )}
-                </div>
-                <div className="product-facts">
-                  <div>
-                    <h2>About the scent</h2>
-                    <p>{product.description}</p>
-                  </div>
-                  <div>
-                    <h2>Authenticity</h2>
-                    <p>{product.authenticityCopy}</p>
-                  </div>
+                <div className="accordion">
+                  <details open>
+                    <summary>About the scent</summary>
+                    <div>
+                      <p>{product.description}</p>
+                      <NotesPyramid notes={product.notes} />
+                    </div>
+                  </details>
+                  {product.longevity || product.projection || product.seasons.length || product.occasions.length ? (
+                    <details open>
+                      <summary>How it wears</summary>
+                      <div className="wears">
+                        <Meter label="Lasts" value={product.longevity} labels={LONGEVITY} />
+                        <Meter label="Projects" value={product.projection} labels={PROJECTION} />
+                        {product.seasons.length ? (
+                          <p>
+                            <strong>Best in</strong> {product.seasons.map(cap).join(", ")}
+                          </p>
+                        ) : null}
+                        {product.occasions.length ? (
+                          <p>
+                            <strong>Best for</strong> {product.occasions.map((entry) => cap(entry.replace("-", " "))).join(", ")}
+                          </p>
+                        ) : null}
+                      </div>
+                    </details>
+                  ) : null}
+                  <details>
+                    <summary>Authenticity</summary>
+                    <div>
+                      <p>{product.authenticityCopy}</p>
+                      {product.sourceBrand ? <p className="muted-note">Source brand: {product.sourceBrand}</p> : null}
+                    </div>
+                  </details>
+                  <details>
+                    <summary>Delivery &amp; returns</summary>
+                    <div>
+                      <p>
+                        Delivery areas and fees are shown at checkout, before you pay. Read the full <a href="/delivery-returns">Delivery &amp; returns</a> details.
+                      </p>
+                    </div>
+                  </details>
                 </div>
               </div>
             </div>
-            {product.notes.top.length ||
-            product.notes.heart.length ||
-            product.notes.base.length ? (
-              <section className="notes-section">
-                <p className="eyebrow">The scent profile</p>
-                <h2>Notes to know</h2>
-                <div className="notes-grid">
-                  <div>
-                    <h3>Top</h3>
-                    <p>{product.notes.top.join(" · ") || "—"}</p>
-                  </div>
-                  <div>
-                    <h3>Heart</h3>
-                    <p>{product.notes.heart.join(" · ") || "—"}</p>
-                  </div>
-                  <div>
-                    <h3>Base</h3>
-                    <p>{product.notes.base.join(" · ") || "—"}</p>
-                  </div>
+            {!preview && related.length ? (
+              <ProductShelf id="related-title" eyebrow="Keep exploring" title="You may also like." href={`/shop?family=${encodeURIComponent(product.family)}`} linkText={`More ${product.family}`} products={related} />
+            ) : null}
+            {!preview && product ? (
+              <div className={`sticky-buy ${showSticky ? "show" : ""}`} aria-hidden={!showSticky}>
+                <div>
+                  <strong>{variant ? formatMoney(variant.priceMinor) : "Select a size"}</strong>
+                  <span>{variant ? `${product.name} · ${variant.sizeMl} ml` : product.name}</span>
                 </div>
-              </section>
+                <button className="button button--orange" disabled={!canAdd} onClick={add} tabIndex={showSticky ? 0 : -1}>
+                  {canAdd ? "Add to bag" : "Unavailable"}
+                </button>
+              </div>
             ) : null}
           </>
         )}

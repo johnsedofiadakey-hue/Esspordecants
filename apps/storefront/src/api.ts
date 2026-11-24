@@ -19,6 +19,15 @@ export type ProductImage = {
   caption?: string;
 };
 
+export type Audience = "" | "women" | "men" | "unisex";
+
+export type SizeOption = {
+  sizeMl: number;
+  priceMinor: number;
+  available: boolean;
+  stockStatus: "in_stock" | "low_stock" | "out_of_stock";
+};
+
 export type ProductSummary = {
   id: string;
   slug: string;
@@ -29,6 +38,15 @@ export type ProductSummary = {
   family: string;
   shortDescription: string;
   heroImage: ProductImage;
+  /** A second photo to show when a card is hovered. */
+  altImage: ProductImage | null;
+  audience: Audience;
+  /** The flavours that describe the scent, e.g. vanilla, oud. */
+  accords: string[];
+  featured: boolean;
+  /** Published within the last 30 days. */
+  isNew: boolean;
+  sizes: SizeOption[];
   minPriceMinor: number;
   currency: "GHS";
   available: boolean;
@@ -46,6 +64,10 @@ export type Variant = {
 };
 
 export type Product = ProductSummary & {
+  longevity: number;
+  projection: number;
+  seasons: string[];
+  occasions: string[];
   description: string;
   notes: { top: string[]; heart: string[]; base: string[] };
   images: ProductImage[];
@@ -80,11 +102,50 @@ async function getJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function listProducts(query = "", family = ""): Promise<ProductPage> {
-  const params = new URLSearchParams({ page: "1", pageSize: "24" });
-  if (query) params.set("query", query);
-  if (family) params.set("family", family);
+export type ProductFilters = {
+  query?: string;
+  family?: string;
+  audience?: string;
+  accord?: string;
+  house?: string;
+  /** Bottle size in ml. */
+  size?: number;
+  /** Prices in pesewas, the unit every price in the API uses. */
+  minPrice?: number;
+  maxPrice?: number;
+  featured?: boolean;
+  sort?: "newest" | "price-asc" | "price-desc" | "name";
+  page?: number;
+  pageSize?: number;
+};
+
+export function listProducts(filters: ProductFilters = {}): Promise<ProductPage> {
+  const params = new URLSearchParams({ page: String(filters.page ?? 1), pageSize: String(filters.pageSize ?? 24) });
+  if (filters.query) params.set("query", filters.query);
+  if (filters.family) params.set("family", filters.family);
+  if (filters.audience) params.set("audience", filters.audience);
+  if (filters.accord) params.set("accord", filters.accord);
+  if (filters.house) params.set("house", filters.house);
+  if (filters.size) params.set("size", String(filters.size));
+  if (filters.minPrice) params.set("minPrice", String(filters.minPrice));
+  if (filters.maxPrice) params.set("maxPrice", String(filters.maxPrice));
+  if (filters.featured) params.set("featured", "1");
+  if (filters.sort && filters.sort !== "newest") params.set("sort", filters.sort);
   return getJson<ProductPage>(`/api/v1/products?${params}`);
+}
+
+export type Facets = {
+  total: number;
+  families: { name: string; count: number }[];
+  houses: { name: string; count: number }[];
+  audiences: { name: string; count: number }[];
+  accords: { name: string; count: number }[];
+  sizes: { sizeMl: number; count: number }[];
+  price: { minMinor: number; maxMinor: number } | null;
+};
+
+export function getFacets(): Promise<Facets> {
+  return getJson<Facets>("/api/v1/facets");
 }
 
 export function getProduct(slug: string): Promise<Product> {

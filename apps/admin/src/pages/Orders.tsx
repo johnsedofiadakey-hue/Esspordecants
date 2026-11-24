@@ -56,39 +56,29 @@ export function OrderList() {
       ) : data.items.length === 0 ? (
         <Empty title="No orders">Orders appear here once checkout is enabled.</Empty>
       ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Order</th>
-                <th>Customer</th>
-                <th>Status</th>
-                <th>Payment</th>
-                <th>Total</th>
-                <th>Placed</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((order) => (
-                <tr key={order.id} className="clickable" onClick={() => navigate(`/orders/${order.id}`)}>
-                  <td>
-                    <strong className="mono">{order.number}</strong> {order.isSample ? <Badge value="sample" label="synthetic" /> : null}
-                  </td>
-                  <td>
-                    {order.customerName}
-                    <div className="muted small">{order.customerEmail || "Phone order"}</div>
-                  </td>
-                  <td>
-                    <Badge value={order.status} />
-                  </td>
-                  <td className="small">{humanize(order.paymentStatus)}</td>
-                  <td>{formatMoney(order.totalMinor)}</td>
-                  <td className="muted small">{formatDate(order.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="rows">
+          {data.items.map((order) => (
+            <li key={order.id} className="row" onClick={() => navigate(`/orders/${order.id}`)}>
+              <div className="row-main">
+                <div className="row-title">
+                  <strong className="mono">{order.number}</strong>
+                  <Badge value={order.status} /> {order.isSample ? <Badge value="sample" label="synthetic" /> : null}
+                </div>
+                <span>{order.customerName}</span>
+                <div className="row-meta">
+                  <span>
+                    <strong>{formatMoney(order.totalMinor)}</strong>
+                  </span>
+                  <span>Payment: {humanize(order.paymentStatus).toLowerCase()}</span>
+                  <span className="muted">{formatDate(order.createdAt)}</span>
+                </div>
+              </div>
+              <span className="row-chevron" aria-hidden="true">
+                ›
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </>
   );

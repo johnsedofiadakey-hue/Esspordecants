@@ -194,3 +194,81 @@ describe("Store details, abuse guards, exports, import and link previews", () =>
     assert.ok(sitemap.includes(`https://shop.test/product/${slug}`) && sitemap.includes("https://shop.test/privacy"));
   });
 });
+
+describe("Scent profile, shop filters and facets", () => {
+  let ctx: Awaited<ReturnType<typeof setup>>;
+  let app: ReturnType<typeof createApp>;
+  let admin: Awaited<ReturnType<typeof login>>["admin"];
+  const ids: Record<string, string> = {};
+
+  before(async () => {
+    ctx = await setup({ siteUrl: "https://shop.test", catalogCacheMs: 0 });
+    app = createApp({ store: ctx.store, config: ctx.config });
+    admin = (await login(app)).admin;
+    const make = async (name: string, house: string, price: number, profile: Record<string, unknown>) => {
+      const created = await createPublishedProduct(admin, 8, name);
+      await admin("PATCH", `/products/${created.productId}`, { body: { house, name, ...profile } });
+      await admin("PATCH", `/products/${created.productId}/variants/${created.variantId}`, { body: { priceMinor: price } });
+      ids[name] = created.productId;
+    };
+    await make("Amber Night", "Atelier Noor", 9000, { family: "Oriental", audience: "men", accords: ["amber", "Oud", "spicy"], longevity: 5, projection: 4, seasons: ["autumn", "winter"], occasions: ["evening"], featured: true });
+    await make("Citrus Morn", "Casa Sol", 5000, { family: "Citrus", audience: "women", accords: ["citrus", "fresh"], longevity: 3, projection: 3, seasons: ["spring", "summer"], occasions: ["daily", "work"] });
+    await make("Cloud Musk", "Casa Sol", 7000, { family: "Musky", audience: "unisex", accords: ["musk", "powdery"] });
+  });
+
+  const list = async (query: string) => (await call(app, "GET", `/api/v1/products?${query}`)).data.items.map((item: { name: string }) => item.name);
+
+  test("the scent profile is saved, validated and shown on the product page", async () => {
+    const detail = (await call(app, "GET", `/api/v1/products/${(await admin("GET", `/products/${ids["Amber Night"]}`)).data.slug}`)).data;
+    assert.equal(detail.audience, "men");
+    assert.deepEqual(detail.accords, ["amber", "Oud", "spicy"]);
+    assert.equal(detail.longevity, 5);
+    assert.deepEqual(detail.seasons, ["autumn", "winter"]);
+    assert.equal(detail.featured, true);
+    assert.equal(detail.isNew, true, "just published counts as new");
+    assert.deepEqual(detail.sizes.map((s: { sizeMl: number; priceMinor: number }) => [s.sizeMl, s.priceMinor]), [[5, 9000]]);
+    assert.equal(detail.altImage, null, "one photo means no hover photo");
+    for (const bad of [{ audience: "robots" }, { longevity: 9 }, { seasons: ["monsoon"] }, { accords: ["x".repeat(31)] }]) {
+      assert.equal((await admin("PATCH", `/products/${ids["Amber Night"]}`, { body: bad })).status, 400, JSON.stringify(bad));
+    }
+  });
+
+  test("the shop can be filtered by who it is for, flavour, house, size and price, and sorted", async () => {
+    assert.deepEqual((await list("audience=women")).sort(), ["Citrus Morn", "Cloud Musk"], "unisex fragrances suit everyone");
+    assert.deepEqual((await list("audience=men")).sort(), ["Amber Night", "Cloud Musk"]);
+    assert.deepEqual(await list("audience=unisex"), ["Cloud Musk"]);
+    assert.deepEqual(await list("accord=OUD"), ["Amber Night"], "flavours match without regard to case");
+    assert.deepEqual((await list("house=casa%20sol")).sort(), ["Citrus Morn", "Cloud Musk"]);
+    assert.deepEqual(await list("featured=1"), ["Amber Night"]);
+    assert.deepEqual((await list("size=5")).length, 3);
+    assert.deepEqual(await list("size=10"), []);
+    assert.deepEqual(await list("minPrice=6000&maxPrice=8000"), ["Cloud Musk"]);
+    assert.deepEqual(await list("sort=price-asc"), ["Citrus Morn", "Cloud Musk", "Amber Night"]);
+    assert.deepEqual(await list("sort=price-desc"), ["Amber Night", "Cloud Musk", "Citrus Morn"]);
+    assert.deepEqual(await list("sort=name"), ["Amber Night", "Citrus Morn", "Cloud Musk"]);
+    assert.deepEqual(await list("query=powdery"), ["Cloud Musk"], "search also covers flavours");
+    assert.equal((await call(app, "GET", "/api/v1/products?sort=random")).status, 400);
+  });
+
+  test("facets list what exists with counts, so the filters only offer real choices", async () => {
+    const facets = (await call(app, "GET", "/api/v1/facets")).data;
+    assert.equal(facets.total, 3);
+    assert.deepEqual(facets.houses, [{ name: "Atelier Noor", count: 1 }, { name: "Casa Sol", count: 2 }]);
+    assert.deepEqual(facets.audiences.map((a: { name: string }) => a.name), ["men", "unisex", "women"]);
+    assert.deepEqual(facets.sizes, [{ sizeMl: 5, count: 3 }]);
+    assert.deepEqual(facets.price, { minMinor: 5000, maxMinor: 9000 });
+    assert.ok(facets.accords.some((a: { name: string }) => a.name === "citrus"));
+  });
+
+  test("a spreadsheet can carry who it is for and its flavours", async () => {
+    const rows = [{ house: "Import House", name: "Sheet Scent", audience: "Women", accords: "Rose; Vanilla", sku: "IMP-1", sizeMl: "5", priceGhs: "60" }];
+    const bad = await admin("POST", "/products/import", { body: { rows: [{ ...rows[0], audience: "kids" }], dryRun: true } });
+    assert.ok(bad.data.errors.length === 1 && /women, men or unisex/.test(bad.data.errors[0].message));
+    const done = await admin("POST", "/products/import", { body: { rows, dryRun: false } });
+    assert.equal(done.data.created.length, 1);
+    const found = (await admin("GET", "/products?q=sheet%20scent")).data.items[0];
+    const product = (await admin("GET", `/products/${found.id}`)).data;
+    assert.equal(product.audience, "women");
+    assert.deepEqual(product.accords, ["rose", "vanilla"]);
+  });
+});

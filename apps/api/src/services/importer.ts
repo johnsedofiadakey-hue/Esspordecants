@@ -3,6 +3,7 @@ import { COLLECTIONS, type Store } from "../firebase.ts";
 import { fold, newId, slugify } from "../lib/util.ts";
 import { recordStock } from "./orders.ts";
 import { invalidateCatalog } from "./catalog.ts";
+import { AUDIENCES } from "./terms.ts";
 import { assertUniqueSkus, assertUniqueSlug, emptyProduct, finalize, type ProductDoc, type VariantRec } from "./products.ts";
 
 // One row per size. Rows sharing a house and name become one draft product. Imported
@@ -21,6 +22,13 @@ export const importRow = z.object({
   notesHeart: text(600),
   notesBase: text(600),
   sourceBrand: text(160),
+  audience: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .default("")
+    .refine((value) => value === "" || (AUDIENCES as readonly string[]).includes(value), "Who it is for must be women, men or unisex."),
+  accords: text(400),
   sku: z
     .string()
     .trim()
@@ -107,6 +115,8 @@ export async function importProducts(store: Store, rawRows: unknown[], options: 
         product.shortDescription = first.shortDescription;
         product.description = first.description;
         product.sourceBrand = first.sourceBrand;
+        product.audience = first.audience as ProductDoc["audience"];
+        product.accords = notes(first.accords).map((accord) => accord.toLowerCase());
         product.notes = { top: notes(first.notesTop), heart: notes(first.notesHeart), base: notes(first.notesBase) };
         product.variants = rows.map(({ data }, order): VariantRec => ({
           id: newId(),

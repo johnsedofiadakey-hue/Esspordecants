@@ -26,6 +26,15 @@ import { publicContent, type ContentDoc } from "./admin/content.ts";
 const listQuery = z.object({
   query: z.string().trim().max(100).optional().default(""),
   family: z.string().trim().max(60).optional().default(""),
+  audience: z.string().trim().max(20).optional().default(""),
+  accord: z.string().trim().max(30).optional().default(""),
+  house: z.string().trim().max(120).optional().default(""),
+  // Sizes in ml, and prices in pesewas (the same unit as every price in the API).
+  size: z.coerce.number().min(0).max(500).optional().default(0),
+  minPrice: z.coerce.number().int().min(0).optional().default(0),
+  maxPrice: z.coerce.number().int().min(0).optional().default(0),
+  featured: z.enum(["1", "true", ""]).optional().default(""),
+  sort: z.enum(["newest", "price-asc", "price-desc", "name"]).optional().default("newest"),
   page: z.coerce.number().int().min(1).max(1000).optional().default(1),
   pageSize: z.coerce.number().int().min(1).max(48).optional().default(12),
 });
@@ -83,7 +92,7 @@ const MEDIA_CACHE = "public, max-age=86400, s-maxage=86400";
 
 function searchText(product: Product) {
   return fold(
-    [product.house, product.name, product.family, product.shortDescription, ...product.notes.top, ...product.notes.heart, ...product.notes.base].join(" "),
+    [product.house, product.name, product.family, product.audience ?? "", product.shortDescription, ...(product.accords ?? []), ...product.notes.top, ...product.notes.heart, ...product.notes.base].join(" "),
   );
 }
 
@@ -99,10 +108,30 @@ export function publicRoutes(deps: Deps) {
     const query = parse(listQuery, c.req.query());
     const needle = fold(query.query);
     const family = fold(query.family);
+    const accord = fold(query.accord);
+    const house = fold(query.house);
+    const audience = fold(query.audience);
+    // A size or price filter looks at what can actually be bought, not at hidden or inactive sizes.
+    const sellable = (product: Product) => product.variants.filter((variant) => variant.active && variant.priceMinor > 0);
     const matches = (await listPublicProductsCached(store, config.catalogCacheMs, listPublicProducts))
       .filter((product) => !needle || searchText(product).includes(needle))
       .filter((product) => !family || fold(product.family) === family)
-      .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "") || a.name.localeCompare(b.name));
+      .filter((product) => !house || fold(product.house) === house)
+      .filter((product) => !accord || (product.accords ?? []).some((entry) => fold(entry) === accord))
+      .filter((product) => !audience || fold(product.audience ?? "") === audience || (audience !== "unisex" && fold(product.audience ?? "") === "unisex"))
+      .filter((product) => !query.featured || product.featured)
+      .filter((product) => !query.size || sellable(product).some((variant) => variant.sizeMl === query.size))
+      .filter((product) => {
+        if (!query.minPrice && !query.maxPrice) return true;
+        return sellable(product).some((variant) => variant.priceMinor >= query.minPrice && (!query.maxPrice || variant.priceMinor <= query.maxPrice));
+      });
+    const lowest = (product: Product) => Math.min(...sellable(product).map((variant) => variant.priceMinor), Infinity);
+    matches.sort((a, b) => {
+      if (query.sort === "price-asc") return lowest(a) - lowest(b) || a.name.localeCompare(b.name);
+      if (query.sort === "price-desc") return lowest(b) - lowest(a) || a.name.localeCompare(b.name);
+      if (query.sort === "name") return a.name.localeCompare(b.name);
+      return (b.publishedAt ?? "").localeCompare(a.publishedAt ?? "") || a.name.localeCompare(b.name);
+    });
     const start = (query.page - 1) * query.pageSize;
     c.header("Cache-Control", CACHE_PUBLIC);
     return c.json({
@@ -132,6 +161,33 @@ export function publicRoutes(deps: Deps) {
     const site = await getSiteSettings(store);
     c.header("Cache-Control", "public, max-age=60, s-maxage=300");
     return c.json(site);
+  });
+
+  // Everything the shop's filters need in one call: what exists, and how many of each.
+  app.get("/api/v1/facets", async (c) => {
+    const products = await listPublicProductsCached(store, config.catalogCacheMs, listPublicProducts);
+    const tally = (values: string[]) => {
+      const counts = new Map<string, number>();
+      for (const value of values.filter(Boolean)) counts.set(value, (counts.get(value) ?? 0) + 1);
+      return [...counts].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, count }));
+    };
+    const prices = products.flatMap((product) => product.variants.filter((variant) => variant.active && variant.priceMinor > 0).map((variant) => variant.priceMinor));
+    const sizes = new Map<number, number>();
+    for (const product of products) {
+      for (const size of new Set(product.variants.filter((variant) => variant.active && variant.priceMinor > 0).map((variant) => variant.sizeMl))) {
+        sizes.set(size, (sizes.get(size) ?? 0) + 1);
+      }
+    }
+    c.header("Cache-Control", CACHE_PUBLIC);
+    return c.json({
+      total: products.length,
+      families: tally(products.map((product) => product.family)),
+      houses: tally(products.map((product) => product.house)),
+      audiences: tally(products.map((product) => product.audience ?? "")),
+      accords: tally(products.flatMap((product) => product.accords ?? [])).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      sizes: [...sizes].sort(([a], [b]) => a - b).map(([sizeMl, count]) => ({ sizeMl, count })),
+      price: prices.length ? { minMinor: Math.min(...prices), maxMinor: Math.max(...prices) } : null,
+    });
   });
 
   app.get("/api/v1/families", async (c) => {

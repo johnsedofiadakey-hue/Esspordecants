@@ -3,6 +3,7 @@ import { COLLECTIONS, type Store } from "../firebase.ts";
 import { ApiError, conflict, notFound } from "../lib/errors.ts";
 import { now } from "../lib/util.ts";
 import { invalidateCatalog } from "./catalog.ts";
+import type { Audience } from "./terms.ts";
 import { approvalProblems, mediaKind, sortImages, type ImageRec, type ImageRole, type MediaKind } from "./images.ts";
 
 export type ProductStatus = "draft" | "published" | "archived";
@@ -38,6 +39,14 @@ export type ProductDoc = {
   whatArrives: string;
   copyApproved: boolean;
   physical: { bottleMaterial: string; capType: string; labelVersion: string; packagingNotes: string };
+  // How the fragrance is described and found in the shop. All optional.
+  audience: Audience | "";
+  accords: string[];
+  longevity: number; // 0 = not set, otherwise 1 to 5
+  projection: number;
+  seasons: string[];
+  occasions: string[];
+  featured: boolean;
   isSample: boolean;
   images: ImageRec[];
   variants: VariantRec[];
@@ -69,6 +78,13 @@ export function emptyProduct(house: string, name: string, slug: string): Product
     whatArrives: "",
     copyApproved: false,
     physical: { bottleMaterial: "", capType: "", labelVersion: "", packagingNotes: "" },
+    audience: "",
+    accords: [],
+    longevity: 0,
+    projection: 0,
+    seasons: [],
+    occasions: [],
+    featured: false,
     isSample: false,
     images: [],
     variants: [],
@@ -251,6 +267,18 @@ export async function mutateProduct<T>(
   return written;
 }
 
+// Older products were saved before these fields existed, so read them with defaults.
+export function profile(product: ProductDoc) {
+  return {
+    audience: product.audience ?? "",
+    accords: product.accords ?? [],
+    longevity: product.longevity ?? 0,
+    projection: product.projection ?? 0,
+    seasons: product.seasons ?? [],
+    occasions: product.occasions ?? [],
+  };
+}
+
 // ---------- Admin serialization ----------
 
 export function adminImage(image: ImageRec, productId: string | null) {
@@ -315,6 +343,8 @@ export function adminProduct(product: Product) {
     whatArrives: product.whatArrives,
     copyApproved: product.copyApproved,
     physical: product.physical,
+    ...profile(product),
+    featured: product.featured ?? false,
     isSample: product.isSample,
     publishedAt: product.publishedAt,
     createdAt: product.createdAt,
@@ -336,6 +366,9 @@ function publicImage(baseUrl: string, image: ImageRec): PublicImage {
   return out;
 }
 
+// A product counts as new for this many days after it is published.
+export const NEW_DAYS = 30;
+
 const sellable = (product: ProductDoc) => product.variants.filter((variant) => variant.active && variant.priceMinor > 0);
 
 export function publicSummary(baseUrl: string, product: Product) {
@@ -353,6 +386,13 @@ export function publicSummary(baseUrl: string, product: Product) {
     family: product.family,
     shortDescription: product.shortDescription,
     heroImage: publicImage(baseUrl, hero),
+    // A second photo for the card to show on hover.
+    altImage: photos.find((image) => image !== hero && image.role !== "source-bottle") ? publicImage(baseUrl, photos.find((image) => image !== hero && image.role !== "source-bottle")!) : null,
+    audience: product.audience ?? "",
+    accords: product.accords ?? [],
+    featured: product.featured ?? false,
+    isNew: Boolean(product.publishedAt) && Date.now() - Date.parse(product.publishedAt!) < NEW_DAYS * 86_400_000,
+    sizes: variants.map((variant) => ({ sizeMl: variant.sizeMl, priceMinor: variant.priceMinor, available: stockStatus(variant) !== "out_of_stock", stockStatus: stockStatus(variant) })),
     minPriceMinor: variants.length ? Math.min(...variants.map((variant) => variant.priceMinor)) : 0,
     currency: "GHS" as const,
     available: variants.some((variant) => stockStatus(variant) !== "out_of_stock"),
@@ -364,6 +404,10 @@ export function publicDetail(baseUrl: string, product: Product) {
   const imageMap = new Map(images.filter((image) => mediaKind(image) === "image").map((image) => [image.id, image]));
   return {
     ...publicSummary(baseUrl, product),
+    longevity: product.longevity ?? 0,
+    projection: product.projection ?? 0,
+    seasons: product.seasons ?? [],
+    occasions: product.occasions ?? [],
     description: product.description,
     notes: product.notes,
     images: images.map((image) => publicImage(baseUrl, image)),

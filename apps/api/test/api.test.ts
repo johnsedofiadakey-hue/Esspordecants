@@ -116,8 +116,9 @@ describe("Esspor API", () => {
     assert.ok(source.caption.includes("Original"));
     assert.equal(detail.data.variants[0].stockStatus, "low_stock");
     assert.deepEqual(Object.keys(detail.data).sort(), [
-      "authenticityCopy", "available", "concentration", "currency", "description", "family", "heroImage", "house", "id",
-      "images", "minPriceMinor", "name", "notes", "shortDescription", "slug", "sourceBrand", "status", "variants", "whatArrives",
+      "accords", "altImage", "audience", "authenticityCopy", "available", "concentration", "currency", "description", "family", "featured",
+      "heroImage", "house", "id", "images", "isNew", "longevity", "minPriceMinor", "name", "notes", "occasions", "projection", "seasons",
+      "shortDescription", "sizes", "slug", "sourceBrand", "status", "variants", "whatArrives",
     ]);
 
     const media = await call(ctx.app, "GET", `/media/${frontFile}`);

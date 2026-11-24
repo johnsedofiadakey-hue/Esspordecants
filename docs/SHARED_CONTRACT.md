@@ -208,3 +208,14 @@ Additive. The storefront is updated to match.
 - **Link previews**: `/product/:slug` is served by the API (a Hosting rewrite), which returns the storefront's own `index.html` with that product's title, description, canonical link, `og:` tags and `Product` structured data. Unknown slugs return a real `404` with `noindex`. The page's security headers are copied from the static `index.html`. `/sitemap.xml` is also generated, using `SITE_URL`. `robots.txt` is a static file in `apps/storefront/public` (Google's function frontend never forwards that path).
 - **Admin additions** (not part of the public contract): `POST /api/admin/products/import` (dry run first; drafts only, never overwrites), `GET /api/admin/orders/export` (CSV), `GET /api/admin/orders/attention` (what needs action), `PATCH /api/admin/orders/:id` now also takes `publicNote`, and the overview summary includes 30-day sales.
 - **Removed from the storefront**: `/preview/product` is served only in development.
+
+## Shop, filters and scent profile (draft 7, 2026-11-24, Claude)
+
+Additive: older products keep working (every new field has a default).
+
+- **New product fields** (admin `PATCH /products/:id`, all optional): `audience` (`""`, `women`, `men` or `unisex`), `accords` (up to 12 flavour tags such as vanilla or oud), `longevity` and `projection` (0 to 5, 0 meaning not set), `seasons` (spring, summer, autumn, winter), `occasions` (daily, work, casual, evening, date-night, special) and `featured` (boolean).
+- **Public summary** (`GET /api/v1/products`) gains `altImage` (a second photo, or null), `audience`, `accords`, `featured`, `isNew` (published in the last 30 days) and `sizes: [{ sizeMl, priceMinor, available, stockStatus }]`. The detail adds `longevity`, `projection`, `seasons` and `occasions`.
+- **List filters**: `audience` (a `women` or `men` search also returns `unisex` products), `accord`, `house`, `size` (ml), `minPrice` and `maxPrice` (pesewas), `featured=1`, and `sort` (`newest`, `price-asc`, `price-desc`, `name`) next to the existing `query` and `family`. Matching ignores case and accents. `query` also searches flavours.
+- **`GET /api/v1/facets`**: `{ total, families, houses, audiences, accords, sizes, price }` with counts, so the shop only offers choices that exist.
+- **Spreadsheet import** accepts `audience` and `flavours` columns.
+- **Storefront**: new home sections (trust bar, new arrivals, staff picks, ways to shop, houses, questions, chat link), a filterable shop whose choices live in the web address, richer product cards, and a product page with size cards, flavour links, a notes pyramid, longevity and projection meters, related fragrances and a sticky buy bar on phones.

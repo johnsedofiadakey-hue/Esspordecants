@@ -38,7 +38,7 @@ const HEADERS: Record<string, string> = {
   house: "house", brand: "house", name: "name", fragrance: "name", concentration: "concentration", family: "family", scentfamily: "family",
   shortdescription: "shortDescription", summary: "shortDescription", description: "description",
   notestop: "notesTop", topnotes: "notesTop", notesheart: "notesHeart", heartnotes: "notesHeart", notesbase: "notesBase", basenotes: "notesBase",
-  sourcebrand: "sourceBrand", sku: "sku", sizeml: "sizeMl", size: "sizeMl", ml: "sizeMl",
+  sourcebrand: "sourceBrand", audience: "audience", gender: "audience", foranyone: "audience", accords: "accords", flavours: "accords", flavors: "accords", sku: "sku", sizeml: "sizeMl", size: "sizeMl", ml: "sizeMl",
   priceghs: "priceGhs", price: "priceGhs", pricecedis: "priceGhs", stock: "stock", quantity: "stock",
 };
 
@@ -57,7 +57,7 @@ export function rowsToObjects(table: string[][]): { rows: Record<string, string>
 }
 
 export const IMPORT_TEMPLATE = [
-  "house,name,concentration,family,short_description,description,top_notes,heart_notes,base_notes,source_brand,sku,size_ml,price_ghs,stock",
-  'Lattafa,Khamrah,Eau de Parfum,Gourmand,Warm spice and dates.,"A rich, sweet gourmand with cinnamon, dates and vanilla.",Cinnamon; Nutmeg,Dates; Praline,Vanilla; Tonka,Lattafa,LAT-KHA-5,5,85,10',
-  "Lattafa,Khamrah,,,,,,,,,LAT-KHA-10,10,150,6",
+  "house,name,concentration,family,audience,flavours,short_description,description,top_notes,heart_notes,base_notes,source_brand,sku,size_ml,price_ghs,stock",
+  'Lattafa,Khamrah,Eau de Parfum,Gourmand,unisex,Vanilla; Spicy; Sweet,Warm spice and dates.,"A rich, sweet gourmand with cinnamon, dates and vanilla.",Cinnamon; Nutmeg,Dates; Praline,Vanilla; Tonka,Lattafa,LAT-KHA-5,5,85,10',
+  "Lattafa,Khamrah,,,,,,,,,,,LAT-KHA-10,10,150,6",
 ].join("\r\n");

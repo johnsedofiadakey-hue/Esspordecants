@@ -37,6 +37,7 @@ import {
 } from "../../services/products.ts";
 import { invalidateCatalog } from "../../services/catalog.ts";
 import { importProducts, MAX_IMPORT_ROWS } from "../../services/importer.ts";
+import { AUDIENCES, OCCASIONS, SEASONS } from "../../services/terms.ts";
 import { refreshContentForImage } from "./content.ts";
 
 const productFields = z.object({
@@ -52,6 +53,13 @@ const productFields = z.object({
   authenticityCopy: longText(2000),
   whatArrives: longText(2000),
   copyApproved: z.boolean(),
+  audience: z.enum([...AUDIENCES, ""]),
+  accords: z.array(z.string().trim().min(1).max(30)).max(12),
+  longevity: z.number().int().min(0).max(5),
+  projection: z.number().int().min(0).max(5),
+  seasons: z.array(z.enum(SEASONS)).max(4),
+  occasions: z.array(z.enum(OCCASIONS)).max(6),
+  featured: z.boolean(),
   physical: z.object({
     bottleMaterial: shortText(120),
     capType: shortText(120),
