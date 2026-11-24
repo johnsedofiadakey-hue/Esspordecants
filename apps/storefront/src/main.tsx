@@ -96,6 +96,9 @@ const DEFAULT_SITE: SiteSettings = {
 };
 const SITE_KEY = "esspor-site-v1";
 
+// Where staff sign in. A separate site, so it is a plain link rather than a page here.
+const ADMIN_URL = (import.meta.env.VITE_ADMIN_URL as string | undefined) || "https://esspordecants-admin.web.app";
+
 function cachedSite(): SiteSettings | null {
   try {
     const saved = JSON.parse(sessionStorage.getItem(SITE_KEY) || "null");
@@ -263,6 +266,10 @@ function Footer() {
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
         </span>
+        {/* Deliberately quiet: staff know where it is, customers have no need for it. */}
+        <a className="staff-link" href={ADMIN_URL} rel="nofollow noreferrer">
+          Staff login
+        </a>
       </small>
     </footer>
   );

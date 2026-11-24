@@ -1984,3 +1984,18 @@ button.text-link {
   gap: 8px;
   align-content: start;
 }
+
+/* A staff sign-in link that stays out of customers' way: small and faint until it is
+   hovered or focused, then fully readable. */
+.site-footer .staff-link {
+  justify-self: start;
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+.site-footer .staff-link:hover,
+.site-footer .staff-link:focus-visible {
+  opacity: 1;
+}

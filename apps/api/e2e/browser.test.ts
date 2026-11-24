@@ -354,6 +354,8 @@ describe("Storefront in a real browser", () => {
     assert.match(await browser.eval<string>("document.querySelector('.info-page').innerHTML"), /wa\.me\/233245550199/);
     assert.match(await browser.text(".info-page"), /Osu, Accra\. Weekdays 10 to 6\./);
     assert.match(await browser.eval<string>("document.querySelector('.site-footer').innerHTML"), /instagram\.com\/esspor\.gh/);
+    assert.match(await browser.eval<string>("document.querySelector('.site-footer .staff-link').href"), /^https:\/\/[^/]*admin[^/]*\//, "the footer has a quiet link to the admin site");
+    assert.ok(Number(await browser.eval("getComputedStyle(document.querySelector('.site-footer .staff-link')).opacity")) < 1, "and it is understated until hovered");
     await browser.go("/nonsense");
     assert.equal(await browser.text("h1"), "Page not found");
     assert.equal(await browser.eval("document.querySelector('meta[name=robots]')?.content"), "noindex");
